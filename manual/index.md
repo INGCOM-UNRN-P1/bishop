@@ -187,3 +187,54 @@ check-bishop:
 ````
 
 Ejecutá `make check-bishop` antes de cada commit para asegurar que tu código conserve el estado de aprobación.
+
+---
+
+(manual-bishop-arquitectura)=
+## 7. Arquitectura Interna y Mecanismo Técnico
+
+La herramienta **`bishop`** implementa un motor de alta precisión basado en:
+
+- **Tecnología Núcleo:** `GDB/MI Machine Interface + DWARF Symbol Parser + Rich Terminal Tables + Mermaid JS Engine`.
+- **Aislamiento y Determinismo:** Diseñada para operar sin efectos colaterales en entornos de integración continua (CI), terminales de estudiantes y servidores docentes headless.
+- **Manejo de Errores Pedagógico:** Todo fallo de sintaxis, memoria o lógica se traduce en una acción prescriptiva concreta con su respectiva justificación técnica.
+
+---
+
+(manual-bishop-ecosistema)=
+## 8. Integración y Conexión con el Ecosistema
+
+````{note}
+Ninguna herramienta opera de forma aislada. **`bishop`** forma parte del pipeline integral de evaluación, verificación y enseñanza de la cátedra.
+````
+
+### Diagrama de Flujo e Interoperabilidad
+
+````{mermaid}
+graph TD
+    DAE[Daedalus: Compilador -g3] -->|Binario con DWARF| BSH[Bishop: Inspector de Memoria]
+    BSH -->|Inspección Stack & Heap| GDB[GDB/MI Protocol]
+    BSH -->|Diagramas ASCII| TERM[Terminal del Estudiante]
+    BSH -->|Diagramas Mermaid| MYST[Myst-Tools: Apuntes y Guías]
+    BSH -->|Contexto de Punteros| HAL[Hal: Forense de Crashes]
+````
+
+### Matriz de Intercambio de Datos
+
+| Canal | Herramientas Conectadas | Tipo de Datos Transferidos |
+| :--- | :--- | :--- |
+| **Entradas (Inputs)** | - `daedalus (binarios C con símbolos de depuración -g3)` | Código fuente, AST, binarios, testcases, contratos |
+| **Salidas (Outputs)** | - `hal (trazas de memoria)`
+- `deckard (diagramas para enunciados)`
+- `myst-tools (apuntes)` | Informes Markdown, diagnósticos Rich, JSON, actas |
+| **Sincronización** | `sebastian`, `brett`, `hal` | Validación cruzada, flags compartidos y autofix |
+
+### Pipeline de Integración Recomendado
+
+Podés encadenar `bishop` con otras herramientas del ecosistema en una única línea de comando:
+
+````{code-block} bash
+# Pipeline de integración típico
+daedalus compile src/main.c -g3 -o bin/app && bishop trace --format mermaid -o memoria.md -- ./bin/app
+````
+
