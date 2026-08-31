@@ -359,3 +359,12 @@ Podés encadenar `bishop` con otras herramientas del ecosistema en una única l�
 daedalus compile src/main.c -g3 -o bin/app && bishop trace --format mermaid -o memoria.md -- ./bin/app
 ````
 
+---
+
+(manual-bishop-seccion-plugins)=
+## 9. Extensión, Desarrollo de Plugins y API Python
+
+Para crear tus propias reglas, conectores de evaluación o integrar `bishop` programáticamente en pipelines de CI/CD:
+
+- 👉 **Consultá la guía completa:** [Guía de Extensión y Creación de Plugins](plugins.md)
+
