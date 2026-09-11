@@ -196,6 +196,115 @@ def report_cmd(
         print(md_content)
 
 
+@app.command("beginner")
+def beginner_cmd(
+    fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
+    punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+) -> None:
+    """Modo visualización simplificada para principiantes en español rioplatense."""
+    from bishop.core.ascii_visualizer import render_modo_principiante
+    if not fuente.is_file():
+        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
+        raise typer.Exit(code=2)
+    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    console.print(render_modo_principiante(snap))
+
+
+@app.command("heap-map")
+def heap_map_cmd(
+    fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
+    punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+) -> None:
+    """Muestra un mapa visual de fragmentación del Heap con bloques libres y ocupados."""
+    from bishop.core.ascii_visualizer import render_heap_fragmentation_map
+    if not fuente.is_file():
+        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
+        raise typer.Exit(code=2)
+    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    console.print(render_heap_fragmentation_map(snap))
+
+
+@app.command("ascii")
+def ascii_cmd(
+    fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
+    punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+) -> None:
+    """Muestra punteros y marcos de Stack con flechas direccionales ASCII en terminal."""
+    from bishop.core.ascii_visualizer import render_ascii_punteros
+    if not fuente.is_file():
+        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
+        raise typer.Exit(code=2)
+    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    console.print(render_ascii_punteros(snap))
+
+
+@app.command("audit")
+def audit_cmd(
+    fuente: Path = typer.Argument(..., help="Archivo C a auditar."),
+    punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+) -> None:
+    """Audita punteros colgantes (en rojo), fugas/huérfanos (en amarillo) y solapamiento de buffers."""
+    from bishop.core.memory_analyzer import (
+        auditar_punteros_colgantes,
+        detectar_fugas_y_huerfanos,
+        detectar_punteros_multiples,
+        detectar_buffer_overflow_stack,
+    )
+    if not fuente.is_file():
+        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
+        raise typer.Exit(code=2)
+
+    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    dangling = auditar_punteros_colgantes(snap)
+    huerfanos = detectar_fugas_y_huerfanos(snap)
+    multiples = detectar_punteros_multiples(snap)
+
+    overflows = []
+    for f in snap.frames:
+        overflows.extend(detectar_buffer_overflow_stack(f))
+
+    if not dangling and not huerfanos and not overflows:
+        console.print("[green]✓ Auditoría limpia: No se detectaron punteros colgantes ni fugas.[/green]")
+        raise typer.Exit(code=0)
+
+    for d in dangling:
+        console.print(f"[bold red]⚠️ PUNTERO COLGANTE[/bold red] en {d['frame']}::{d['variable']} -> {d['motivo']}")
+
+    for h in huerfanos:
+        console.print(f"[bold yellow]⚠️ BLOQUE HUÉRFANO (FUGA)[/bold yellow] en {h['direccion']} ({h['tamanio_bytes']} B)")
+
+    for o in overflows:
+        console.print(f"[bold magenta]⚠️ SOLAPAMIENTO DE BUFFER[/bold magenta]: {o['mensaje']}")
+
+    raise typer.Exit(code=1)
+
+
+@app.command("diff")
+def diff_cmd(
+    fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
+    linea_antes: int = typer.Option(1, "--antes", "-a", help="Línea antes de la llamada."),
+    linea_despues: int = typer.Option(2, "--despues", "-d", help="Línea después de la llamada."),
+) -> None:
+    """Compara snapshots de memoria antes y después de una invocación de función."""
+    from bishop.core.memory_analyzer import comparar_snapshots
+    if not fuente.is_file():
+        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
+        raise typer.Exit(code=2)
+
+    snap_antes = capturar_snapshot_gdb(fuente, linea_corte=linea_antes)
+    snap_despues = capturar_snapshot_gdb(fuente, linea_corte=linea_despues)
+    diff = comparar_snapshots(snap_antes, snap_despues)
+
+    console.print(Panel(
+        f"• Frames creados: {diff['frames_creados'] or 'Ninguno'}\n"
+        f"• Frames destruidos: {diff['frames_destruidos'] or 'Ninguno'}\n"
+        f"• Delta bytes Heap: {diff['delta_heap_bytes']:+d} B\n"
+        f"• Bloques nuevos: {diff['bloques_nuevos'] or 'Ninguno'}",
+        title="Comparación de Memoria Antes/Después",
+        border_style="cyan",
+    ))
+
+
 def main() -> None:
     app()
 
