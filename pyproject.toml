@@ -17,6 +17,9 @@ dependencies = [
 [project.scripts]
 bishop = "bishop.cli:main"
 
+[project.entry-points."ripley.plugins"]
+bishop = "bishop.ripley_plugin:BishopPlugin"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/bishop"]
 
