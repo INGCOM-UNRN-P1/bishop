@@ -308,6 +308,80 @@ def diff_cmd(
     ))
 
 
+@app.command("doctor")
+def doctor_cmd(
+    json_output: bool = typer.Option(False, "--json", help="Emitir diagnóstico en formato JSON estructurado."),
+) -> None:
+    """Verifica el estado del entorno de inspección dinámica de memoria BISHOP (Python, GCC, GDB)."""
+    import shutil
+    import subprocess
+    import sys
+    diagnostico = []
+
+    py_ok = sys.version_info >= (3, 10)
+    diagnostico.append({
+        "componente": "Python Runtime",
+        "estado": "OK" if py_ok else "ERROR",
+        "requerido": True,
+        "detalle": f"Python {sys.version.split()[0]}",
+    })
+
+    gcc_path = shutil.which("gcc")
+    diagnostico.append({
+        "componente": "Compilador GCC",
+        "estado": "OK" if gcc_path else "ERROR",
+        "requerido": True,
+        "detalle": gcc_path or "No encontrado (requerido para compilar con -g)",
+    })
+
+    gdb_path = shutil.which("gdb")
+    gdb_ok = False
+    if gdb_path:
+        try:
+            res = subprocess.run([gdb_path, "--version"], capture_output=True, text=True, timeout=5)
+            first_line = res.stdout.splitlines()[0] if res.stdout else "GDB operativo"
+            gdb_ok = True
+            gdb_det = f"{gdb_path} ({first_line})"
+        except Exception as e:
+            gdb_det = str(e)
+    else:
+        gdb_det = "No encontrado (requerido para capturar snapshots de Stack y Heap)"
+
+    diagnostico.append({
+        "componente": "Depurador GDB",
+        "estado": "OK" if gdb_ok else "ERROR",
+        "requerido": True,
+        "detalle": gdb_det,
+    })
+
+    todo_ok = py_ok and bool(gcc_path) and gdb_ok
+
+    if json_output:
+        payload = {
+            "schema_version": "1.0.0",
+            "herramienta": "bishop",
+            "ok": todo_ok,
+            "componentes": diagnostico,
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0 if todo_ok else 1)
+
+    tabla = Table(title="🏥 Diagnóstico del Entorno BISHOP (doctor)", border_style="cyan")
+    tabla.add_column("Componente", style="bold white")
+    tabla.add_column("Estado", justify="center")
+    tabla.add_column("Detalle")
+
+    for c in diagnostico:
+        color = "bold green" if c["estado"] == "OK" else "bold red"
+        simbolo = "✓" if c["estado"] == "OK" else "✗"
+        tabla.add_row(c["componente"], f"[{color}]{simbolo} {c['estado']}[/{color}]", c["detalle"])
+
+    console.print(tabla)
+    if not todo_ok:
+        console.print("\n[bold red]Instalá gcc y gdb (`sudo apt install gcc gdb` o equivalente).[/bold red]")
+        raise typer.Exit(code=1)
+
+
 def main() -> None:
     app()
 
