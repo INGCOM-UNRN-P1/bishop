@@ -82,6 +82,7 @@ class SnapshotMemoria:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "schema_version": "1.0.0",
             "archivo": str(self.archivo),
             "linea": self.linea,
             "total_frames": len(self.frames),

@@ -49,7 +49,10 @@ def main_callback(
 
 def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
     """Genera sección de auditoría e inspección de memoria para Dredd."""
-    lines = ["## Inspección de Memoria y Punteros (Bishop)\n"]
+    lines = [
+        "<!-- dredd-section: bishop v1.0.0 -->\n",
+        "## Inspección de Memoria y Punteros (Bishop)\n",
+    ]
     lines.append(f"- **Archivo analizado:** `{snap.archivo.name}` (línea {snap.linea})")
     lines.append(f"- **Frames en Stack:** {len(snap.frames)}")
     lines.append(f"- **Bloques activos en Heap:** {len(snap.heap)} ({snap.total_bytes_heap_activos} bytes)")
@@ -64,8 +67,8 @@ def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
         lines.append("| Función | Línea | Variables Locales |")
         lines.append("| :--- | :---: | :--- |")
         for f in snap.frames:
-            vars_str = ", ".join(f"`{v.nombre}={v.valor}`" for v in f.variables) if f.variables else "*Sin variables*"
-            lines.append(f"| `{f.funcion}` | {f.linea_actual or '-'} | {vars_str} |")
+            vars_str = ", ".join(f"`{v.nombre.replace('|', '&#124;')}={v.valor.replace('|', '&#124;')}`" for v in f.variables) if f.variables else "*Sin variables*"
+            lines.append(f"| `{f.funcion.replace('|', '&#124;')}` | {f.linea_actual or '-'} | {vars_str} |")
         lines.append("")
 
     if snap.heap:
@@ -73,7 +76,7 @@ def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
         lines.append("| Dirección | Tamaño | Estado | Punteros Asociados |")
         lines.append("| :--- | :---: | :---: | :--- |")
         for b in snap.heap:
-            ptrs = ", ".join(f"`{p}`" for p in b.punteros_referenciantes) if b.punteros_referenciantes else "**⚠️ Huérfano**"
+            ptrs = ", ".join(f"`{p.replace('|', '&#124;')}`" for p in b.punteros_referenciantes) if b.punteros_referenciantes else "**⚠️ Huérfano**"
             estado = "Liberado" if b.esta_liberado else "Activo"
             lines.append(f"| `{b.direccion}` | {b.tamanio_bytes} B | {estado} | {ptrs} |")
         lines.append("")
