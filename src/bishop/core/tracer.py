@@ -13,10 +13,33 @@ from typing import List, Optional, Tuple
 from bishop.core.models import BloqueHeap, SnapshotMemoria, StackFrameMemoria, VariableMemoria
 
 
+def _compilar_con_daedalus(fuente_c: Path, out_bin: Path) -> Optional[Tuple[bool, Optional[Path], str]]:
+    try:
+        from daedalus.core.compiler import compilar_archivos
+        res = compilar_archivos([fuente_c], binario_salida=out_bin, flags_adicionales=["-g", "-O0"])
+        return res.exito, (out_bin if res.exito else None), res.stderr_crudo
+    except ImportError:
+        import sys
+        sibling = Path(__file__).resolve().parents[4] / "daedalus" / "src"
+        if sibling.is_dir() and str(sibling) not in sys.path:
+            sys.path.insert(0, str(sibling))
+            try:
+                from daedalus.core.compiler import compilar_archivos
+                res = compilar_archivos([fuente_c], binario_salida=out_bin, flags_adicionales=["-g", "-O0"])
+                return res.exito, (out_bin if res.exito else None), res.stderr_crudo
+            except ImportError:
+                return None
+        return None
+
+
 def compilar_con_simbolos(fuente_c: Path, out_dir: Path) -> Tuple[bool, Optional[Path], str]:
-    """Compila el código fuente con símbolos de depuración (-g -O0)."""
-    gcc = shutil.which("gcc") or "gcc"
+    """Compila el código fuente con símbolos de depuración (-g -O0) delegando en DAEDALUS."""
     binario = out_dir / fuente_c.stem
+    daed_res = _compilar_con_daedalus(fuente_c, binario)
+    if daed_res is not None:
+        return daed_res
+
+    gcc = shutil.which("gcc") or "gcc"
     cmd = [gcc, "-g", "-O0", "-std=c11", str(fuente_c.resolve()), "-o", str(binario.resolve()), "-lm"]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
