@@ -76,6 +76,19 @@ def _detectar_punto_corte_optimo(fuente_c: Path) -> str:
     return "main"
 
 
+def es_archivo_binario(ruta: Path) -> bool:
+    """Comprueba si un archivo es un ejecutable/binario en lugar de código fuente C."""
+    try:
+        with open(ruta, "rb") as f:
+            cabecera = f.read(1024)
+            # Detección de ejecutables ELF, Mach-O, PE/COFF o presencia de bytes nulos
+            if cabecera.startswith((b"\x7fELF", b"\xca\xfe\xba\xbe", b"\xfe\xed\xfa", b"MZ")):
+                return True
+            return b"\x00" in cabecera
+    except Exception:
+        return False
+
+
 def capturar_snapshot_gdb(
     fuente_c: Path,
     punto_corte: Optional[str] = None,
@@ -85,6 +98,12 @@ def capturar_snapshot_gdb(
     fuente_c = Path(fuente_c)
     if not fuente_c.is_file():
         raise FileNotFoundError(f"No se encontró el archivo: {fuente_c}")
+
+    if es_archivo_binario(fuente_c):
+        raise ValueError(
+            f"El archivo '{fuente_c.name}' es un binario compilado. "
+            f"BISHOP espera un archivo de código fuente C (ej: '{fuente_c.stem}.c') para compilarlo con símbolos de depuración e inspeccionar su memoria."
+        )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)

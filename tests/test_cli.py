@@ -115,3 +115,30 @@ def test_cli_doctor():
     data = json.loads(res_json.stdout)
     assert data["herramienta"] == "bishop"
     assert data["ok"] is True
+
+
+def test_cli_error_al_recibir_binario(tmp_path):
+    binario = tmp_path / "app.bin"
+    binario.write_bytes(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 64)
+
+    for cmd in ("trace", "snapshot", "heap", "report", "beginner", "heap-map", "ascii", "audit", "diff"):
+        args = [cmd, str(binario)]
+        if cmd == "snapshot":
+            args.extend(["--line", "10"])
+        elif cmd == "diff":
+            args.extend(["--antes", "1", "--despues", "2"])
+        res = runner.invoke(app, args)
+        assert res.exit_code == 1
+        assert "binario ejecutable" in res.stderr
+        assert "Traceback" not in res.stderr
+
+
+def test_tracer_capturar_snapshot_gdb_error_binario(tmp_path):
+    import pytest
+    from bishop.core.tracer import capturar_snapshot_gdb
+
+    binario = tmp_path / "test_bin"
+    binario.write_bytes(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 32)
+
+    with pytest.raises(ValueError, match="es un binario compilado"):
+        capturar_snapshot_gdb(binario)

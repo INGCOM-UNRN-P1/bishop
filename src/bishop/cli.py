@@ -13,11 +13,26 @@ from rich.table import Table
 
 from bishop import __version__
 from bishop.core.models import SnapshotMemoria
-from bishop.core.tracer import capturar_snapshot_gdb
+from bishop.core.tracer import capturar_snapshot_gdb, es_archivo_binario
 from bishop.core.visualizer import generar_mermaid_punteros, renderizar_memoria_rich
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def _validar_fuente_c(fuente: Path) -> None:
+    """Valida que el archivo exista y sea código fuente C legible, no un ejecutable o binario."""
+    if not fuente.is_file():
+        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
+        raise typer.Exit(code=2)
+
+    if es_archivo_binario(fuente):
+        err_console.print(
+            f"[bold red]Error:[/bold red] El archivo '[cyan]{fuente.name}[/cyan]' es un binario ejecutable.\n"
+            f"[yellow]BISHOP necesita el código fuente C (ej: '{fuente.stem}.c') para compilarlo con símbolos de depuración (-g) e inspeccionar la memoria.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
 
 app = typer.Typer(
     name="bishop",
@@ -100,9 +115,7 @@ def trace_cmd(
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
 ) -> None:
     """Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del Stack y Heap."""
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
 
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
@@ -131,9 +144,7 @@ def snapshot_cmd(
     json_output: bool = typer.Option(False, "--json", help="Emitir salida en JSON."),
 ) -> None:
     """Toma una foto exacta del estado del Stack y Heap en una línea específica de código."""
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
 
     snap = capturar_snapshot_gdb(fuente, linea_corte=linea)
 
@@ -151,9 +162,7 @@ def heap_cmd(
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en JSON."),
 ) -> None:
     """Audita exclusivamente el estado del Heap, bloques activos y detección de punteros huérfanos."""
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
 
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
@@ -186,9 +195,7 @@ def report_cmd(
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte estructurado en JSON."),
 ) -> None:
     """Genera directamente la sección de reporte Markdown de BISHOP para Dredd o JSON estructurado."""
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
 
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
@@ -219,9 +226,7 @@ def beginner_cmd(
 ) -> None:
     """Modo visualización simplificada para principiantes en español rioplatense."""
     from bishop.core.ascii_visualizer import render_modo_principiante
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
     if json_output:
@@ -270,9 +275,7 @@ def heap_map_cmd(
     """Muestra un mapa visual de fragmentación del Heap con bloques libres y ocupados."""
     from bishop.core.ascii_visualizer import render_heap_fragmentation_map
     from bishop.core.memory_analyzer import analizar_fragmentacion_heap
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
     if json_output:
@@ -297,9 +300,7 @@ def ascii_cmd(
 ) -> None:
     """Muestra punteros y marcos de Stack con flechas direccionales ASCII en terminal."""
     from bishop.core.ascii_visualizer import render_ascii_punteros
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
     if json_output:
@@ -322,9 +323,7 @@ def audit_cmd(
         detectar_punteros_multiples,
         detectar_buffer_overflow_stack,
     )
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
 
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
     dangling = auditar_punteros_colgantes(snap)
@@ -375,9 +374,7 @@ def diff_cmd(
 ) -> None:
     """Compara snapshots de memoria antes y después de una invocación de función."""
     from bishop.core.memory_analyzer import comparar_snapshots
-    if not fuente.is_file():
-        err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
-        raise typer.Exit(code=2)
+    _validar_fuente_c(fuente)
 
     snap_antes = capturar_snapshot_gdb(fuente, linea_corte=linea_antes)
     snap_despues = capturar_snapshot_gdb(fuente, linea_corte=linea_despues)
