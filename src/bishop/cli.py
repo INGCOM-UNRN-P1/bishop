@@ -147,6 +147,7 @@ def snapshot_cmd(
 @app.command("heap")
 def heap_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a auditar."),
+    punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte opcional para el snapshot."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en JSON."),
 ) -> None:
     """Audita exclusivamente el estado del Heap, bloques activos y detección de punteros huérfanos."""
@@ -154,7 +155,7 @@ def heap_cmd(
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
 
-    snap = capturar_snapshot_gdb(fuente)
+    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 
     if json_output:
         print(json.dumps([b.to_dict() for b in snap.heap], indent=2, ensure_ascii=False))
@@ -182,13 +183,24 @@ def report_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Ruta de destino del archivo Markdown."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte para el snapshot."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir reporte estructurado en JSON."),
 ) -> None:
-    """Genera directamente la sección de reporte Markdown de BISHOP para Dredd."""
+    """Genera directamente la sección de reporte Markdown de BISHOP para Dredd o JSON estructurado."""
     if not fuente.is_file():
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
 
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+
+    if json_output:
+        payload = {
+            "schema_version": "1.0.0",
+            "herramienta": "bishop",
+            "snapshot": snap.to_dict(),
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0)
+
     md_content = generar_seccion_markdown(snap)
 
     if output:
@@ -203,6 +215,7 @@ def report_cmd(
 def beginner_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir guía en JSON estructurado."),
 ) -> None:
     """Modo visualización simplificada para principiantes en español rioplatense."""
     from bishop.core.ascii_visualizer import render_modo_principiante
@@ -210,6 +223,41 @@ def beginner_cmd(
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+
+    if json_output:
+        payload = {
+            "schema_version": "1.0.0",
+            "herramienta": "bishop",
+            "modo": "beginner",
+            "frames": [
+                {
+                    "funcion": f.funcion,
+                    "variables": [
+                        {
+                            "nombre": v.nombre,
+                            "tipo": v.tipo,
+                            "valor": v.valor,
+                            "es_puntero": v.es_puntero,
+                            "direccion_apuntada": v.direccion_apuntada,
+                        }
+                        for v in f.variables
+                    ],
+                }
+                for f in snap.frames
+            ],
+            "heap": [
+                {
+                    "direccion": b.direccion,
+                    "tamanio_bytes": b.tamanio_bytes,
+                    "esta_liberado": b.esta_liberado,
+                    "punteros": b.punteros_referenciantes,
+                }
+                for b in snap.heap
+            ],
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0)
+
     console.print(render_modo_principiante(snap))
 
 
@@ -217,13 +265,27 @@ def beginner_cmd(
 def heap_map_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir fragmentación en JSON estructurado."),
 ) -> None:
     """Muestra un mapa visual de fragmentación del Heap con bloques libres y ocupados."""
     from bishop.core.ascii_visualizer import render_heap_fragmentation_map
+    from bishop.core.memory_analyzer import analizar_fragmentacion_heap
     if not fuente.is_file():
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+
+    if json_output:
+        frag = analizar_fragmentacion_heap(snap)
+        payload = {
+            "schema_version": "1.0.0",
+            "herramienta": "bishop",
+            "mapa": frag,
+            "bloques": [b.to_dict() for b in snap.heap],
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0)
+
     console.print(render_heap_fragmentation_map(snap))
 
 
@@ -231,6 +293,7 @@ def heap_map_cmd(
 def ascii_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir punteros y relaciones en JSON estructurado."),
 ) -> None:
     """Muestra punteros y marcos de Stack con flechas direccionales ASCII en terminal."""
     from bishop.core.ascii_visualizer import render_ascii_punteros
@@ -238,6 +301,11 @@ def ascii_cmd(
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+
+    if json_output:
+        print(json.dumps(snap.to_dict(), indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0)
+
     console.print(render_ascii_punteros(snap))
 
 
@@ -245,6 +313,7 @@ def ascii_cmd(
 def audit_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a auditar."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Punto de corte."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir auditoría en formato JSON estructurado."),
 ) -> None:
     """Audita punteros colgantes (en rojo), fugas/huérfanos (en amarillo) y solapamiento de buffers."""
     from bishop.core.memory_analyzer import (
@@ -266,7 +335,22 @@ def audit_cmd(
     for f in snap.frames:
         overflows.extend(detectar_buffer_overflow_stack(f))
 
-    if not dangling and not huerfanos and not overflows:
+    hay_hallazgos = bool(dangling or huerfanos or overflows)
+
+    if json_output:
+        payload = {
+            "schema_version": "1.0.0",
+            "herramienta": "bishop",
+            "limpio": not hay_hallazgos,
+            "punteros_colgantes": dangling,
+            "fugas_huerfanos": huerfanos,
+            "punteros_multiples": multiples,
+            "desbordamientos_stack": overflows,
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=1 if hay_hallazgos else 0)
+
+    if not hay_hallazgos:
         console.print("[green]✓ Auditoría limpia: No se detectaron punteros colgantes ni fugas.[/green]")
         raise typer.Exit(code=0)
 
@@ -287,6 +371,7 @@ def diff_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a inspeccionar."),
     linea_antes: int = typer.Option(1, "--antes", "-a", help="Línea antes de la llamada."),
     linea_despues: int = typer.Option(2, "--despues", "-d", help="Línea después de la llamada."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir diff de memoria en formato JSON estructurado."),
 ) -> None:
     """Compara snapshots de memoria antes y después de una invocación de función."""
     from bishop.core.memory_analyzer import comparar_snapshots
@@ -297,6 +382,23 @@ def diff_cmd(
     snap_antes = capturar_snapshot_gdb(fuente, linea_corte=linea_antes)
     snap_despues = capturar_snapshot_gdb(fuente, linea_corte=linea_despues)
     diff = comparar_snapshots(snap_antes, snap_despues)
+
+    if json_output:
+        payload = {
+            "schema_version": "1.0.0",
+            "herramienta": "bishop",
+            "linea_antes": linea_antes,
+            "linea_despues": linea_despues,
+            "diff": {
+                "frames_creados": [f.to_dict() for f in diff["frames_creados"]],
+                "frames_destruidos": [f.to_dict() for f in diff["frames_destruidos"]],
+                "delta_heap_bytes": diff["delta_heap_bytes"],
+                "bloques_nuevos": diff["bloques_nuevos"],
+                "bloques_liberados": diff["bloques_liberados"],
+            },
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0)
 
     console.print(Panel(
         f"• Frames creados: {diff['frames_creados'] or 'Ninguno'}\n"

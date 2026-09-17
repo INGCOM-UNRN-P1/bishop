@@ -21,12 +21,19 @@ class VariableMemoria:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "nombre": self.nombre,
+            "name": self.nombre,
             "tipo": self.tipo,
+            "type": self.tipo,
             "direccion": self.direccion,
+            "address": self.direccion,
             "valor": self.valor,
+            "value": self.valor,
             "es_puntero": self.es_puntero,
+            "is_pointer": self.es_puntero,
             "direccion_apuntada": self.direccion_apuntada,
+            "target_address": self.direccion_apuntada,
             "tamanio_bytes": self.tamanio_bytes,
+            "size": self.tamanio_bytes,
         }
 
 
@@ -43,11 +50,17 @@ class BloqueHeap:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "direccion": self.direccion,
+            "address": self.direccion,
             "tamanio_bytes": self.tamanio_bytes,
+            "size": self.tamanio_bytes,
             "linea_asignacion": self.linea_asignacion,
+            "line": self.linea_asignacion,
             "esta_liberado": self.esta_liberado,
+            "is_freed": self.esta_liberado,
             "contenido": self.contenido,
+            "preview": self.contenido,
             "punteros_referenciantes": self.punteros_referenciantes,
+            "pointers": self.punteros_referenciantes,
         }
 
 
@@ -61,12 +74,17 @@ class StackFrameMemoria:
     variables: List[VariableMemoria] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        vars_dict = [v.to_dict() for v in self.variables]
         return {
             "funcion": self.funcion,
+            "function": self.funcion,
             "direccion_base": self.direccion_base,
+            "base_address": self.direccion_base,
             "direccion_tope": self.direccion_tope,
+            "top_address": self.direccion_tope,
             "linea_actual": self.linea_actual,
-            "variables": [v.to_dict() for v in self.variables],
+            "line": self.linea_actual,
+            "variables": vars_dict,
         }
 
 
@@ -81,14 +99,19 @@ class SnapshotMemoria:
     fugas_detectadas: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
+        frames_list = [f.to_dict() for f in self.frames]
+        heap_list = [b.to_dict() for b in self.heap]
         return {
             "schema_version": "1.0.0",
             "archivo": str(self.archivo),
+            "file": str(self.archivo),
             "linea": self.linea,
+            "line": self.linea,
             "total_frames": len(self.frames),
             "total_bloques_heap": len(self.heap),
             "total_bytes_heap_activos": self.total_bytes_heap_activos,
             "fugas_detectadas": self.fugas_detectadas,
-            "frames": [f.to_dict() for f in self.frames],
-            "heap": [b.to_dict() for b in self.heap],
+            "frames": frames_list,
+            "stack": frames_list,
+            "heap": heap_list,
         }

@@ -47,6 +47,35 @@ def compilar_con_simbolos(fuente_c: Path, out_dir: Path) -> Tuple[bool, Optional
     return True, binario, ""
 
 
+def _detectar_punto_corte_optimo(fuente_c: Path) -> str:
+    """Detecta la mejor línea o punto de corte para pausar tras asignaciones dinámicas o al final de main."""
+    try:
+        contenido = fuente_c.read_text(encoding="utf-8")
+    except Exception:
+        return "main"
+
+    lineas = contenido.splitlines()
+    ultima_asignacion = None
+    linea_return_main = None
+    en_main = False
+
+    for idx, linea in enumerate(lineas, 1):
+        l_strip = linea.strip()
+        if re.search(r"\b(int|void)\s+main\s*\(", l_strip):
+            en_main = True
+        if re.search(r"\b(malloc|calloc|realloc)\s*\(", l_strip):
+            ultima_asignacion = idx
+        if en_main and re.search(r"\breturn\b", l_strip):
+            linea_return_main = idx
+
+    if ultima_asignacion:
+        linea_target = min(len(lineas), ultima_asignacion + 1)
+        return f"{fuente_c.name}:{linea_target}"
+    if linea_return_main:
+        return f"{fuente_c.name}:{linea_return_main}"
+    return "main"
+
+
 def capturar_snapshot_gdb(
     fuente_c: Path,
     punto_corte: Optional[str] = None,
@@ -68,18 +97,19 @@ def capturar_snapshot_gdb(
         if not gdb_bin:
             return _generar_snapshot_estatico(fuente_c, linea_corte or 1)
 
-        bp = punto_corte or (f"{fuente_c.name}:{linea_corte}" if linea_corte else "main")
+        bp = punto_corte or (f"{fuente_c.name}:{linea_corte}" if linea_corte else _detectar_punto_corte_optimo(fuente_c))
         with tempfile.NamedTemporaryFile("w", suffix=".gdb", delete=False) as f_gdb:
             gdb_script = f_gdb.name
             f_gdb.write("set pagination off\n")
             f_gdb.write("set confirm off\n")
             f_gdb.write(f"break {bp}\n")
             f_gdb.write("run\n")
-            f_gdb.write("next\n")
-            f_gdb.write("echo ===BISHOP_FRAME===\n")
-            f_gdb.write("info frame\n")
             f_gdb.write("echo ===BISHOP_LOCALS===\n")
             f_gdb.write("info locals\n")
+            f_gdb.write("echo ===BISHOP_MAPPINGS===\n")
+            f_gdb.write("info proc mappings\n")
+            f_gdb.write("echo ===BISHOP_FRAME===\n")
+            f_gdb.write("info frame\n")
             f_gdb.write("echo ===BISHOP_ARGS===\n")
             f_gdb.write("info args\n")
             f_gdb.write("quit\n")
@@ -109,7 +139,25 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
     locals_section = ""
     if "===BISHOP_LOCALS===" in gdb_output:
         partes = gdb_output.split("===BISHOP_LOCALS===")
-        locals_section = partes[1].split("===BISHOP_ARGS===")[0]
+        locals_section = partes[1].split("===BISHOP_MAPPINGS===")[0]
+
+    # Extraer mappings para rangos reales de [heap] y [stack]
+    heap_ranges: List[Tuple[int, int]] = []
+    stack_ranges: List[Tuple[int, int]] = []
+    if "===BISHOP_MAPPINGS===" in gdb_output:
+        m_sec = gdb_output.split("===BISHOP_MAPPINGS===")[1].split("===BISHOP_FRAME===")[0]
+        for l_map in m_sec.splitlines():
+            partes_map = l_map.split()
+            if len(partes_map) >= 2:
+                try:
+                    s_addr = int(partes_map[0], 16)
+                    e_addr = int(partes_map[1], 16)
+                    if "[heap]" in l_map:
+                        heap_ranges.append((s_addr, e_addr))
+                    elif "[stack]" in l_map:
+                        stack_ranges.append((s_addr, e_addr))
+                except (ValueError, TypeError):
+                    continue
 
     base_addr = 0x7fffffffe000
     for idx, l in enumerate(locals_section.splitlines(), 1):
@@ -140,15 +188,38 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
         variables=variables,
     )
 
-    # Detectar bloques de heap si los punteros apuntan a heap (0x5555... o similar)
+    # Detectar bloques de heap:
+    # 1. Si cae dentro del rango [heap] de /proc/mappings
+    # 2. O si empieza con 0x55, 0x56, 0x40 (direcciones típicas de heap en Linux x86_64) y no es dirección de stack
+    def _es_direccion_heap(addr_hex: str) -> bool:
+        try:
+            val = int(addr_hex, 16)
+        except (ValueError, TypeError):
+            return False
+        if heap_ranges:
+            return any(s <= val < e for s, e in heap_ranges)
+        # Fallback heurístico: no en stack ni nulo
+        if stack_ranges and any(s <= val < e for s, e in stack_ranges):
+            return False
+        return addr_hex.startswith(("0x55", "0x56", "0x40", "0x60")) and val > 0x10000
+
     heap_bloques: List[BloqueHeap] = []
+    bloques_vistos = set()
     for v in variables:
-        if v.es_puntero and v.direccion_apuntada and v.direccion_apuntada.startswith("0x55"):
-            heap_bloques.append(BloqueHeap(
-                direccion=v.direccion_apuntada,
-                tamanio_bytes=32,
-                punteros_referenciantes=[v.nombre],
-            ))
+        if v.es_puntero and v.direccion_apuntada and _es_direccion_heap(v.direccion_apuntada):
+            addr_norm = v.direccion_apuntada.lower()
+            if addr_norm not in bloques_vistos:
+                bloques_vistos.add(addr_norm)
+                heap_bloques.append(BloqueHeap(
+                    direccion=v.direccion_apuntada,
+                    tamanio_bytes=32,
+                    punteros_referenciantes=[v.nombre],
+                ))
+            else:
+                # Agregar puntero referenciante adicional
+                for b in heap_bloques:
+                    if b.direccion.lower() == addr_norm and v.nombre not in b.punteros_referenciantes:
+                        b.punteros_referenciantes.append(v.nombre)
 
     return SnapshotMemoria(
         archivo=fuente,
