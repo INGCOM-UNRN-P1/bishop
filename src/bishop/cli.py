@@ -64,8 +64,9 @@ def main_callback(
 
 def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
     """Genera sección de auditoría e inspección de memoria para Dredd."""
+    status = "fail" if snap.fugas_detectadas > 0 else "ok"
     lines = [
-        "<!-- dredd-section: bishop v1.0.0 -->\n",
+        f"<!-- dredd-section: bishop, tool=bishop, version=1.0.0, status={status} -->\n",
         "## Inspección de Memoria y Punteros (Bishop)\n",
     ]
     lines.append(f"- **Archivo analizado:** `{snap.archivo.name}` (línea {snap.linea})")
