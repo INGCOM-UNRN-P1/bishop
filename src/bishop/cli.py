@@ -35,6 +35,7 @@ def _validar_fuente_c(fuente: Path) -> None:
 
 
 app = typer.Typer(
+    context_settings={"help_option_names": ["-h", "--help"]},
     name="bishop",
     help="🧠 BISHOP — Visualizador pedagógico de memoria C (Stack, Heap y punteros) en terminal y diagramas.",
     add_completion=True,
