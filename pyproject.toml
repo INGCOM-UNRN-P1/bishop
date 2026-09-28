@@ -34,6 +34,13 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+# Herramientas del ecosistema que se usan como biblioteca (N-ECO-01). Referencias git fijadas
+# a commits publicados; sin el extra se usa el camino propio (gcc, sin sandbox de nostromo…).
+ecosistema = [
+    "daedalus @ git+https://github.com/INGCOM-UNRN-P1/daedalus@cd3eb998193cd5bd9ea881aa9a0e19f5fe6d9a86",
+]
+
 [project.urls]
 Homepage = "https://github.com/INGCOM-UNRN-P1/bishop"
 Repository = "https://github.com/INGCOM-UNRN-P1/bishop.git"
@@ -55,3 +62,7 @@ pythonpath = ["src"]
 dev = [
     "pytest>=7.4.0",
 ]
+
+[tool.hatch.metadata]
+# Las dependencias del ecosistema son referencias directas a git (nunca por nombre en PyPI).
+allow-direct-references = true

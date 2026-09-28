@@ -16,20 +16,10 @@ from bishop.core.models import BloqueHeap, SnapshotMemoria, StackFrameMemoria, V
 def _compilar_con_daedalus(fuente_c: Path, out_bin: Path) -> Optional[Tuple[bool, Optional[Path], str]]:
     try:
         from daedalus.core.compiler import compilar_archivos
-        res = compilar_archivos([fuente_c], binario_salida=out_bin, flags_adicionales=["-g", "-O0"])
-        return res.exito, (out_bin if res.exito else None), res.stderr_crudo
     except ImportError:
-        import sys
-        sibling = Path(__file__).resolve().parents[4] / "daedalus" / "src"
-        if sibling.is_dir() and str(sibling) not in sys.path:
-            sys.path.insert(0, str(sibling))
-            try:
-                from daedalus.core.compiler import compilar_archivos
-                res = compilar_archivos([fuente_c], binario_salida=out_bin, flags_adicionales=["-g", "-O0"])
-                return res.exito, (out_bin if res.exito else None), res.stderr_crudo
-            except ImportError:
-                return None
-        return None
+        return None  # sin el extra `ecosistema` se usa el camino propio
+    res = compilar_archivos([fuente_c], binario_salida=out_bin, flags_adicionales=["-g", "-O0"])
+    return res.exito, (out_bin if res.exito else None), res.stderr_crudo
 
 
 def compilar_con_simbolos(fuente_c: Path, out_dir: Path) -> Tuple[bool, Optional[Path], str]:
