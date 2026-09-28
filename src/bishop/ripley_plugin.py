@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
+from bishop import __version__
 from bishop.core.tracer import capturar_snapshot_gdb
 
 
@@ -12,7 +13,7 @@ class BishopPlugin:
     """Expone el snapshot de memoria de BISHOP como observaciones JSON."""
 
     name = "bishop"
-    version = "0.1.0"
+    version = __version__
 
     def is_available(self) -> bool:
         return True
