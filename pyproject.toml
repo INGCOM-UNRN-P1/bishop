@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bishop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Visualizador pedagógico de memoria C (Stack, Heap y punteros) en terminal y diagramas"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
