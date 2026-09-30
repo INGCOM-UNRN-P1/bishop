@@ -77,3 +77,38 @@ bishop diff main.c --antes 5 --despues 10 [--json]
 # 10. Diagnóstico del entorno (Python >= 3.10, GCC, GDB)
 bishop doctor [--json]
 ```
+
+<!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
+
+## Referencia rápida
+
+### Requisitos
+
+- Python ≥ 3.11 y [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- Programas del sistema: `gcc`, `gdb`.
+
+| Sistema | `gcc` | `gdb` |
+|:--|:--|:--|
+| Debian / Ubuntu | `sudo apt install gcc` | `sudo apt install gdb` |
+| Fedora | `sudo dnf install gcc` | `sudo dnf install gdb` |
+| Windows | incluido en el entorno de la cátedra (MSYS2 UCRT64) | incluido en el entorno de la cátedra (MSYS2 UCRT64) |
+| macOS | `xcode-select --install` (clang como `gcc`) | `brew install gdb` (en Apple Silicon no está: usar `lldb`) |
+
+### Comandos
+
+| Comando | Descripción |
+|:--|:--|
+| `bishop trace` | Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del Stack y Heap. |
+| `bishop snapshot` | Toma una foto exacta del estado del Stack y Heap en una línea específica de código. |
+| `bishop heap` | Audita exclusivamente el estado del Heap, bloques activos y detección de punteros huérfanos. |
+| `bishop report` | Genera directamente la sección de reporte Markdown de BISHOP para Dredd o JSON estructurado. |
+| `bishop beginner` | Modo visualización simplificada para principiantes en español rioplatense. |
+| `bishop heap-map` | Muestra un mapa visual de fragmentación del Heap con bloques libres y ocupados. |
+| `bishop ascii` | Muestra punteros y marcos de Stack con flechas direccionales ASCII en terminal. |
+| `bishop audit` | Audita punteros colgantes (en rojo), fugas/huérfanos (en amarillo) y solapamiento de buffers. |
+| `bishop diff` | Compara snapshots de memoria antes y después de una invocación de función. |
+| `bishop doctor` | Verifica el estado del entorno de inspección dinámica de memoria BISHOP (Python, GCC, GDB). |
+
+Ayuda de cada comando: `bishop <comando> -h`.
+
+<!-- p1:referencia:fin -->
