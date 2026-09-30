@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from yutani.cli import crear_app
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -34,33 +35,14 @@ def _validar_fuente_c(fuente: Path) -> None:
         raise typer.Exit(code=1)
 
 
-app = typer.Typer(
-    context_settings={"help_option_names": ["-h", "--help"]},
-    name="bishop",
-    help="🧠 BISHOP — Visualizador pedagógico de memoria C (Stack, Heap y punteros) en terminal y diagramas.",
+# Contrato de línea de comandos del ecosistema (-h/--help, --version/-v, errores de datos como
+# mensajes) y textos de Typer en español, desde yutani (N-ECO-14).
+app = crear_app(
+    "bishop",
+    __version__,
+    "🧠 BISHOP — Visualizador pedagógico de memoria C (Stack, Heap y punteros) en terminal y diagramas.",
     add_completion=True,
-    no_args_is_help=True,
 )
-
-
-def _version_callback(value: bool) -> None:
-    if value:
-        console.print(f"[bold cyan]BISHOP[/bold cyan] versión [bold]{__version__}[/bold]")
-        raise typer.Exit(code=0)
-
-
-@app.callback()
-def main_callback(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-v",
-        help="Muestra la versión de BISHOP.",
-        callback=_version_callback,
-        is_eager=True,
-    ),
-) -> None:
-    pass
 
 
 def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
