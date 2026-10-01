@@ -39,3 +39,20 @@ def test_sin_mappings_el_heap_se_reconoce_por_exclusion():
     snapshot = _parsear_salida_gdb_memoria(Path("mem.c"), SALIDA_WINDOWS, 5)
     # q apunta a datos estáticos (.data) y r a la pila: solo p es un bloque del heap.
     assert [b.punteros_referenciantes for b in snapshot.heap] == [["p"]]
+
+
+def test_con_los_limites_de_la_pila_del_tib():
+    """En Windows la pila y el heap pueden quedar a menos de 1 MiB: con los límites de $_tlb, un
+    puntero cercano al frame pero fuera de la pila es heap (y uno dentro de la pila, no)."""
+    from bishop.core.tracer import _parsear_salida_gdb_memoria
+
+    salida = (
+        "===BISHOP_LOCALS===\np = 0x7d1450\nq = 0x5ffe20\n"
+        "===BISHOP_MAPPINGS===\n"
+        "===BISHOP_FRAME===\nStack level 0, frame at 0x5ffe60:\n"
+        "===BISHOP_ARGS===\nNo arguments.\n"
+        "===BISHOP_FILES===\n\t0x0000000140001000 - 0x0000000140002000 is .text\n"
+        "===BISHOP_TLB===\n$1 = 0x600000\n$2 = 0x5fd000\n"
+    )
+    snap = _parsear_salida_gdb_memoria(Path("mem.c"), salida, 4)
+    assert [b.direccion for b in snap.heap] == ["0x7d1450"]

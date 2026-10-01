@@ -126,6 +126,11 @@ def capturar_snapshot_gdb(
             # distinguir un puntero al heap de uno a datos estáticos.
             f_gdb.write("echo ===BISHOP_FILES===\n")
             f_gdb.write("info files\n")
+            # Límites de la pila en Windows (bloque de información del hilo, $_tlb). Va al final:
+            # en Linux $_tlb no existe y el error corta el resto del script.
+            f_gdb.write("echo ===BISHOP_TLB===\n")
+            f_gdb.write("print/x $_tlb->current_top_of_stack\n")
+            f_gdb.write("print/x $_tlb->current_bottom_of_stack\n")
             f_gdb.write("quit\n")
 
         try:
@@ -183,9 +188,16 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
         if m_frame:
             frame_addr = int(m_frame.group(1), 16)
     if "===BISHOP_FILES===" in gdb_output:
-        sec_files = gdb_output.split("===BISHOP_FILES===")[1]
+        sec_files = gdb_output.split("===BISHOP_FILES===")[1].split("===BISHOP_TLB===")[0]
         for m_sec in re.finditer(r"(0x[0-9a-fA-F]+)\s*-\s*(0x[0-9a-fA-F]+)\s+is\s+\S+", sec_files):
             static_ranges.append((int(m_sec.group(1), 16), int(m_sec.group(2), 16)))
+    # En Windows, la pila del hilo: entre current_bottom_of_stack y current_top_of_stack del TIB. Ahí
+    # la pila y el heap pueden quedar a menos de 1 MiB, así que la distancia al frame no alcanza.
+    if "===BISHOP_TLB===" in gdb_output:
+        limites = [int(v, 16) for v in re.findall(r"^\$\d+ = (0x[0-9a-fA-F]+)", gdb_output.split("===BISHOP_TLB===")[1],
+                                                   re.MULTILINE)]
+        if len(limites) == 2 and min(limites) < max(limites):
+            stack_ranges.append((min(limites), max(limites)))
 
     base_addr = 0x7fffffffe000
     for idx, l in enumerate(locals_section.splitlines(), 1):
@@ -229,6 +241,10 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
         # Fallback heurístico: no en stack ni nulo
         if stack_ranges and any(s <= val < e for s, e in stack_ranges):
             return False
+        if stack_ranges and static_ranges:
+            # Sin /proc pero con los límites de la pila (Windows): heap es lo que no está en la pila
+            # ni en las secciones del ejecutable o de las bibliotecas.
+            return val > 0x10000 and not any(s <= val < e for s, e in static_ranges)
         if frame_addr is not None and static_ranges:
             # Sin /proc (Windows): heap es lo que no está en las secciones del ejecutable o de las
             # bibliotecas ni en la pila (a menos de 1 MiB del frame actual).

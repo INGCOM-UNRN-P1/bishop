@@ -27,7 +27,13 @@ import json, os
 import gdb
 
 CONFIG = json.load(open(os.environ["BISHOP_TRAZA_CONFIG"], encoding="utf-8"))
-FUENTES = set(CONFIG["fuentes"])
+# Por nombre de archivo y sin mayúsculas: en Windows, la ruta que da gdb (C:/Users/…) no coincide
+# con la de Python (C:\\Users\\…), ni siquiera con realpath.
+def nombre_de(ruta):
+    return ruta.replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+
+NOMBRES = {nombre_de(f) for f in CONFIG["fuentes"]}
 pasos, estado = [], {"senal": None, "codigo_salida": None, "truncado": False}
 
 
@@ -45,7 +51,9 @@ gdb.events.exited.connect(_al_terminar)
 
 
 def en_fuente(sal):
-    return sal is not None and sal.symtab is not None and os.path.realpath(sal.symtab.fullname()) in FUENTES
+    if sal is None or sal.symtab is None:
+        return False
+    return nombre_de(sal.symtab.filename) in NOMBRES
 
 
 def describir(valor):
@@ -134,9 +142,11 @@ for orden in ("set pagination off", "set confirm off", "set debuginfod enabled o
 if CONFIG.get("envoltorio"):
     gdb.execute("set exec-wrapper " + CONFIG["envoltorio"], to_string=True)
 gdb.execute("break " + CONFIG["inicio"], to_string=True)
-redireccion = " > '" + CONFIG["salida_programa"] + "' 2>&1"
+# En Windows gdb hace la redirección sin shell: las rutas van entre comillas dobles.
+comilla = '"' if os.name == "nt" else "'"
+redireccion = " > " + comilla + CONFIG["salida_programa"] + comilla + " 2>&1"
 if CONFIG.get("entrada"):
-    redireccion = " < '" + CONFIG["entrada"] + "'" + redireccion
+    redireccion = " < " + comilla + CONFIG["entrada"] + comilla + redireccion
 gdb.execute("run" + redireccion, to_string=True)
 
 while True:
