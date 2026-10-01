@@ -97,9 +97,37 @@ def trace_cmd(
     mermaid_view: bool = typer.Option(False, "--mermaid", "-m", help="Emitir diagrama de punteros en formato Mermaid."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en formato JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
+    html_salida: Optional[Path] = typer.Option(None, "--html", help="Ejecutar línea por línea y guardar una página HTML navegable con el código, la pila y la salida en cada paso."),
+    entrada: Optional[Path] = typer.Option(None, "--input", "-i", exists=True, dir_okay=False, help="Archivo para la entrada estándar del programa (con --html)."),
+    max_pasos: int = typer.Option(300, "--max-steps", min=1, max=5000, help="Máximo de pasos de la traza (con --html)."),
 ) -> None:
     """Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del Stack y Heap."""
     _validar_fuente_c(fuente)
+
+    if html_salida:
+        from bishop.core.html_traza import generar_html_traza
+        from bishop.core.paso_a_paso import ErrorDeTraza, trazar_paso_a_paso
+
+        try:
+            traza = trazar_paso_a_paso(fuente, entrada=entrada, inicio=punto_corte or "main", max_pasos=max_pasos)
+        except ErrorDeTraza as exc:
+            err_console.print(f"[bold red]Error:[/bold red] {exc}")
+            raise typer.Exit(code=2)
+        if not traza.pasos:
+            err_console.print(f"[bold red]Error:[/bold red] no se registró ningún paso: ¿el programa llega a "
+                              f"'{punto_corte or 'main'}'?")
+            raise typer.Exit(code=1)
+        html_salida.parent.mkdir(parents=True, exist_ok=True)
+        html_salida.write_text(generar_html_traza(traza), encoding="utf-8")
+        if json_output:
+            print(json.dumps(traza.to_dict(), indent=2, ensure_ascii=False))
+            raise typer.Exit(code=0)
+        final = (f"terminó por {traza.senal}" if traza.senal
+                 else f"se cortó a los {max_pasos} pasos" if traza.truncado
+                 else f"terminó con código {traza.codigo_salida}")
+        console.print(f"[green]✓ Traza de {len(traza.pasos)} pasos en:[/green] [cyan]{html_salida}[/cyan] "
+                      f"[dim](el programa {final}; abrila en el navegador)[/dim]")
+        raise typer.Exit(code=0)
 
     snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
 

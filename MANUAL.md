@@ -15,6 +15,7 @@
 - Representación de punteros, relaciones de direccionamiento e indirecciones multinivel.
 - Monitoreo de memoria dinámica en el Heap (`malloc`, `calloc`, `realloc`, `free`).
 - Renderizado multi-formato: tablas de texto plano, consola interactiva Rich y diagramas Mermaid.
+- Ejecución paso a paso visual, un «Python Tutor para C» (`bishop trace --html`): con la API Python de gdb ejecuta línea por línea y genera una página navegable con el código, la pila de llamadas con sus variables (resaltando lo que cambió) y la salida del programa en cada paso.
 
 ### Límites de Responsabilidad y Delegación (Qué no cubre)
 - Aislamiento o contención de ejecuciones inseguras (delegado a `nostromo`).
@@ -81,10 +82,25 @@ Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del
 | `--mermaid`, `-m` | `bool` | `False` | Emitir diagrama de punteros en formato Mermaid. |
 | `--json` | `bool` | `False` | Emitir reporte en formato JSON. |
 | `--md`, `--output-md`, `-o` | `Optional[Path]` | `None` | Generar sección de reporte en formato Markdown para fusión en Dredd. |
+| `--html` | `Optional[Path]` | `None` | Ejecutar línea por línea y guardar una página HTML navegable con el código, la pila y la salida en cada paso. |
+| `--input`, `-i` | `Optional[Path]` | `None` | Archivo para la entrada estándar del programa (con `--html`). |
+| `--max-steps` | `int` | `300` | Máximo de pasos de la traza (con `--html`). |
+
+Con `--html`, en lugar de una foto en el punto de corte, bishop ejecuta el programa **paso a paso**
+con la API Python de gdb (desde `main`, o desde `--break`): entra a las funciones del estudiante, saltea
+las de la biblioteca (`printf`, `malloc`) y en cada paso guarda la línea a ejecutar, la pila de llamadas
+con sus variables (cada local aparece recién después de declararse; los punteros, con lo que apuntan) y
+la salida que lleva el programa. La página es un solo archivo, sin conexión: código con la próxima línea
+marcada y la anterior en verde, variables que cambiaron resaltadas, salida acumulada, y navegación con
+botones, deslizador o las flechas del teclado. Si el programa recibe una señal (un `SIGSEGV`), el
+último paso la muestra en la línea donde ocurrió. `--json` además imprime la traza. Sale con 2 si falta
+gdb o el programa no compila.
 
 #### Ejemplo de Invocación
 ```bash
 bishop trace <fuente>
+bishop trace lista.c --html traza.html
+bishop trace promedio.c --html traza.html --input casos/entrada.txt --max-steps 500
 ```
 
 ### `bishop snapshot`

@@ -14,6 +14,7 @@ BISHOP es una herramienta standalone diseñada para inspeccionar y visualizar el
 - Representación de punteros, relaciones de direccionamiento e indirecciones multinivel.
 - Monitoreo de memoria dinámica en el Heap (`malloc`, `calloc`, `realloc`, `free`).
 - Renderizado multi-formato: tablas de texto plano, consola interactiva Rich y diagramas Mermaid.
+- Ejecución paso a paso visual, un «Python Tutor para C» (`bishop trace --html`): con la API Python de gdb ejecuta línea por línea y genera una página navegable con el código, la pila de llamadas con sus variables (resaltando lo que cambió) y la salida del programa en cada paso.
 
 ### Qué no cubre (Límites y Delegación)
 - Aislamiento o contención de ejecuciones inseguras (delegado a `nostromo`).
