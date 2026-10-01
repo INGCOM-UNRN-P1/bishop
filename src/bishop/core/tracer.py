@@ -24,7 +24,8 @@ def _compilar_con_daedalus(fuente_c: Path, out_bin: Path) -> Optional[Tuple[bool
 
 def compilar_con_simbolos(fuente_c: Path, out_dir: Path) -> Tuple[bool, Optional[Path], str]:
     """Compila el código fuente con símbolos de depuración (-g -O0) delegando en DAEDALUS."""
-    binario = out_dir / fuente_c.stem
+    # En Windows gcc agrega .exe al binario: se usa esa ruta (N-ECO-10).
+    binario = out_dir / (fuente_c.stem + (".exe" if os.name == "nt" else ""))
     daed_res = _compilar_con_daedalus(fuente_c, binario)
     if daed_res is not None:
         return daed_res
@@ -121,6 +122,10 @@ def capturar_snapshot_gdb(
             f_gdb.write("info frame\n")
             f_gdb.write("echo ===BISHOP_ARGS===\n")
             f_gdb.write("info args\n")
+            # Secciones del ejecutable y de las bibliotecas: sin /proc (Windows) es lo que permite
+            # distinguir un puntero al heap de uno a datos estáticos.
+            f_gdb.write("echo ===BISHOP_FILES===\n")
+            f_gdb.write("info files\n")
             f_gdb.write("quit\n")
 
         try:
@@ -168,6 +173,20 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
                 except (ValueError, TypeError):
                     continue
 
+    # Dirección del frame actual y secciones estáticas (`info files`): con ellas se clasifica un
+    # puntero cuando no hay mappings de /proc, como en Windows.
+    frame_addr = None
+    static_ranges: List[Tuple[int, int]] = []
+    if "===BISHOP_FRAME===" in gdb_output:
+        sec_frame = gdb_output.split("===BISHOP_FRAME===")[1].split("===BISHOP_ARGS===")[0]
+        m_frame = re.search(r"frame at (0x[0-9a-fA-F]+)", sec_frame)
+        if m_frame:
+            frame_addr = int(m_frame.group(1), 16)
+    if "===BISHOP_FILES===" in gdb_output:
+        sec_files = gdb_output.split("===BISHOP_FILES===")[1]
+        for m_sec in re.finditer(r"(0x[0-9a-fA-F]+)\s*-\s*(0x[0-9a-fA-F]+)\s+is\s+\S+", sec_files):
+            static_ranges.append((int(m_sec.group(1), 16), int(m_sec.group(2), 16)))
+
     base_addr = 0x7fffffffe000
     for idx, l in enumerate(locals_section.splitlines(), 1):
         l_str = l.strip()
@@ -210,6 +229,12 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
         # Fallback heurístico: no en stack ni nulo
         if stack_ranges and any(s <= val < e for s, e in stack_ranges):
             return False
+        if frame_addr is not None and static_ranges:
+            # Sin /proc (Windows): heap es lo que no está en las secciones del ejecutable o de las
+            # bibliotecas ni en la pila (a menos de 1 MiB del frame actual).
+            if any(s <= val < e for s, e in static_ranges):
+                return False
+            return val > 0x10000 and abs(val - frame_addr) >= 1 << 20
         return addr_hex.startswith(("0x55", "0x56", "0x40", "0x60")) and val > 0x10000
 
     heap_bloques: List[BloqueHeap] = []
