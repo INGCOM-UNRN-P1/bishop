@@ -56,6 +56,31 @@ def en_fuente(sal):
     return nombre_de(sal.symtab.filename) in NOMBRES
 
 
+FUENTES = {}
+
+
+def texto_de_linea(sal):
+    ruta = sal.symtab.fullname()
+    if ruta not in FUENTES:
+        try:
+            FUENTES[ruta] = open(ruta, encoding="utf-8", errors="replace").read().splitlines()
+        except OSError:
+            FUENTES[ruta] = []
+    lineas = FUENTES[ruta]
+    return lineas[sal.line - 1].strip() if 0 < sal.line <= len(lineas) else ""
+
+
+def en_la_llave_de_apertura(marco, sal):
+    # Con -fstack-protector (Ubuntu lo activa por defecto) gdb se detiene al entrar a una función en
+    # la línea de su llave de apertura, donde se carga el canario, antes de la primera sentencia:
+    # no es un paso del programa, y sin el protector esa parada no existe.
+    texto = texto_de_linea(sal)
+    if texto == "{":
+        return True
+    funcion = marco.function()
+    return funcion is not None and funcion.line == sal.line and texto.endswith("{")
+
+
 def describir(valor):
     try:
         tipo = valor.type.strip_typedefs()
@@ -149,6 +174,7 @@ if CONFIG.get("entrada"):
     redireccion = " < " + comilla + CONFIG["entrada"] + comilla + redireccion
 gdb.execute("run" + redireccion, to_string=True)
 
+saltos_seguidos = 0
 while True:
     try:
         marco = gdb.selected_frame()
@@ -161,6 +187,14 @@ while True:
         except gdb.error:
             break
         continue
+    if saltos_seguidos < 3 and en_la_llave_de_apertura(marco, sal):
+        saltos_seguidos += 1
+        try:
+            gdb.execute("step", to_string=True)
+        except gdb.error:
+            break
+        continue
+    saltos_seguidos = 0
     if len(pasos) >= CONFIG["max_pasos"]:
         estado["truncado"] = True
         break
@@ -200,6 +234,12 @@ class TrazaPasoAPaso:
         return {"schema_version": "1.0.0", "fuente": self.fuente, "pasos": self.pasos, "salida": self.salida,
                 "senal": self.senal, "codigo_salida": self.codigo_salida, "truncado": self.truncado,
                 "max_pasos": self.max_pasos}
+
+
+def _texto_de_salida(crudo: bytes, errors: str, en_windows: bool = os.name == "nt") -> str:
+    """En Windows el programa escribe en modo texto y cada \\n sale como \\r\\n (N-ECO-10)."""
+    texto = crudo.decode("utf-8", errors=errors)
+    return texto.replace("\r\n", "\n") if en_windows else texto
 
 
 def trazar_paso_a_paso(fuente: Path, entrada: Optional[Path] = None, inicio: str = "main",
@@ -242,8 +282,8 @@ def trazar_paso_a_paso(fuente: Path, entrada: Optional[Path] = None, inicio: str
         crudo = salida_programa.read_bytes() if salida_programa.is_file() else b""
     # gdb cuenta bytes; la página corta el texto por caracteres («leí» son 4 bytes y 3 caracteres).
     for paso in datos["pasos"]:
-        paso["salida"] = len(crudo[:paso["salida"]].decode("utf-8", errors="ignore"))
-    salida = crudo.decode("utf-8", errors="replace")
+        paso["salida"] = len(_texto_de_salida(crudo[:paso["salida"]], errors="ignore"))
+    salida = _texto_de_salida(crudo, errors="replace")
     return TrazaPasoAPaso(fuente=str(fuente), pasos=datos["pasos"], salida=salida, senal=datos.get("senal"),
                           codigo_salida=datos.get("codigo_salida"), truncado=datos.get("truncado", False),
                           max_pasos=max_pasos)

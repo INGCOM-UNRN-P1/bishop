@@ -1,15 +1,17 @@
 """`bishop trace --html`: ejecución paso a paso con la API Python de gdb (revisión, 05 §3)."""
 
 import json
+import os
 import re
 import shutil
+import subprocess
 
 import pytest
 from typer.testing import CliRunner
 
 from bishop.cli import app
 from bishop.core.html_traza import generar_html_traza
-from bishop.core.paso_a_paso import ErrorDeTraza, TrazaPasoAPaso, trazar_paso_a_paso
+from bishop.core.paso_a_paso import ErrorDeTraza, TrazaPasoAPaso, _texto_de_salida, trazar_paso_a_paso
 
 runner = CliRunner()
 con_gdb = pytest.mark.skipif(not (shutil.which("gdb") and shutil.which("gcc")), reason="hace falta gcc y gdb")
@@ -68,6 +70,32 @@ def test_traza_linea_por_linea(tmp_path):
     antes_del_segundo_printf = [p for p in traza.pasos if p["linea"] == 17][0]
     assert traza.pasos[0]["salida"] == 0 and antes_del_segundo_printf["salida"] == len("suma: 15\n")
     assert traza.pasos[-1]["salida"] == len(traza.salida)
+
+
+@con_gdb
+@pytest.mark.skipif(os.name == "nt", reason="MinGW no siempre trae libssp")
+def test_con_stack_protector_el_primer_paso_no_es_la_llave(tmp_path, monkeypatch):
+    """Ubuntu compila con -fstack-protector-strong por defecto: gdb se detenía en la llave de apertura
+    de main (línea 13, donde se carga el canario) y ese era el primer paso de la traza."""
+    from bishop.core import tracer
+
+    def compilar(fuente, directorio):
+        binario = directorio / fuente.stem
+        res = subprocess.run(["gcc", "-g", "-O0", "-fstack-protector-strong", str(fuente), "-o", str(binario)],
+                             capture_output=True, text=True)
+        return res.returncode == 0, binario, res.stderr
+
+    monkeypatch.setattr(tracer, "compilar_con_simbolos", compilar)
+    traza = trazar_paso_a_paso(_fuente(tmp_path))
+    lineas = [p["linea"] for p in traza.pasos]
+    assert lineas[0] == 14 and 13 not in lineas and lineas[-1] == 19
+    assert traza.salida == "suma: 15\nana\n"
+
+
+def test_salida_de_windows_sin_retornos_de_carro():
+    """En Windows el programa escribe en modo texto: «\\n» sale como «\\r\\n» (N-ECO-10)."""
+    assert _texto_de_salida(b"suma: 15\r\nana\r\n", "replace", en_windows=True) == "suma: 15\nana\n"
+    assert _texto_de_salida(b"a\r\n", "replace", en_windows=False) == "a\r\n"
 
 
 @con_gdb
