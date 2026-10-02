@@ -66,9 +66,11 @@ def test_traza_linea_por_linea(tmp_path):
     assert len(vueltas) == 3
     assert _variables(traza.pasos[-1])["nombre"]["apunta"] == '"ana"'
     assert _variables(dentro[0])["v"]["puntero"] is True
-    # La salida crece en el paso que la imprime.
-    antes_del_segundo_printf = [p for p in traza.pasos if p["linea"] == 17][0]
-    assert traza.pasos[0]["salida"] == 0 and antes_del_segundo_printf["salida"] == len("suma: 15\n")
+    # La salida crece en el paso que la imprime. En Windows no hay stdbuf: aparece recién cuando el
+    # programa la vuelca (así lo dice MANUAL_ESTUDIANTE de p1-tools).
+    if os.name != "nt":
+        antes_del_segundo_printf = [p for p in traza.pasos if p["linea"] == 17][0]
+        assert traza.pasos[0]["salida"] == 0 and antes_del_segundo_printf["salida"] == len("suma: 15\n")
     assert traza.pasos[-1]["salida"] == len(traza.salida)
 
 
