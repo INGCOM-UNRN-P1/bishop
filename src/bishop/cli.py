@@ -90,6 +90,37 @@ def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
     return "\n".join(lines)
 
 
+@app.command("diagram")
+def diagram_cmd(
+    entrada: Path = typer.Argument(..., exists=True, dir_okay=False, help="Fuente C (memoria real) o traza JSON (frames/stack y heap)."),
+    formato: str = typer.Option("mermaid", "--formato", "-f", help="mermaid o ascii."),
+    punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Con un fuente C: función o línea donde tomar la memoria."),
+    salida: Optional[Path] = typer.Option(None, "--output", "-o", help="Guardar el diagrama en un archivo."),
+) -> None:
+    """Diagrama de memoria (Stack y Heap) en Mermaid o ASCII, para enunciados y lecciones."""
+    from bishop.core.diagrama import FORMATOS, diagrama_de_fuente, generar_diagrama, snapshot_desde_dict
+
+    if formato not in FORMATOS:
+        err_console.print(f"[bold red]Error:[/bold red] formato «{formato}» desconocido: usá mermaid o ascii.")
+        raise typer.Exit(code=2)
+    if entrada.suffix == ".json":
+        try:
+            datos = json.loads(entrada.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            err_console.print(f"[bold red]Error:[/bold red] {entrada} no es un JSON válido ({exc}).")
+            raise typer.Exit(code=2)
+        diagrama = generar_diagrama(snapshot_desde_dict(datos, entrada.name), formato)
+    else:
+        _validar_fuente_c(entrada)
+        diagrama = diagrama_de_fuente(entrada, formato, punto_corte)
+    if salida:
+        salida.parent.mkdir(parents=True, exist_ok=True)
+        salida.write_text(diagrama + "\n", encoding="utf-8")
+        console.print(f"[green]✓ Diagrama ({formato}) en:[/green] [cyan]{salida}[/cyan]")
+    else:
+        print(diagrama)
+
+
 @app.command("trace")
 def trace_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a trazar e inspeccionar."),
