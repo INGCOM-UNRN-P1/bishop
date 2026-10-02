@@ -66,12 +66,15 @@ def test_traza_linea_por_linea(tmp_path):
     assert len(vueltas) == 3
     assert _variables(traza.pasos[-1])["nombre"]["apunta"] == '"ana"'
     assert _variables(dentro[0])["v"]["puntero"] is True
-    # La salida crece en el paso que la imprime. En Windows no hay stdbuf: aparece recién cuando el
-    # programa la vuelca (así lo dice MANUAL_ESTUDIANTE de p1-tools).
+    # La salida acumulada nunca decrece y no pasa del total.
+    acumulada = [p["salida"] for p in traza.pasos]
+    assert acumulada == sorted(acumulada) and acumulada[-1] <= len(traza.salida)
+    # Y crece en el paso que la imprime. En Windows no hay stdbuf: aparece recién cuando el programa
+    # la vuelca, al terminar (así lo dice MANUAL_ESTUDIANTE de p1-tools).
     if os.name != "nt":
         antes_del_segundo_printf = [p for p in traza.pasos if p["linea"] == 17][0]
         assert traza.pasos[0]["salida"] == 0 and antes_del_segundo_printf["salida"] == len("suma: 15\n")
-    assert traza.pasos[-1]["salida"] == len(traza.salida)
+        assert traza.pasos[-1]["salida"] == len(traza.salida)
 
 
 @con_gdb
