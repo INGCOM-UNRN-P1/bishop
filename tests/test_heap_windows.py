@@ -56,3 +56,32 @@ def test_con_los_limites_de_la_pila_del_tib():
     )
     snap = _parsear_salida_gdb_memoria(Path("mem.c"), salida, 4)
     assert [b.direccion for b in snap.heap] == ["0x7d1450"]
+
+
+def test_un_comando_que_falla_no_corta_los_siguientes(monkeypatch, tmp_path):
+    """Con un script (`gdb -x`) el primer error corta el resto, y en Windows `info proc mappings`
+    siempre falla: ni `info files` ni los límites de la pila llegaban a la salida. Cada comando va en
+    su propio -ex, que gdb ejecuta aunque el anterior haya fallado."""
+    import subprocess
+
+    from bishop.core import tracer
+
+    fuente = tmp_path / "mem.c"
+    fuente.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    monkeypatch.setattr(tracer, "compilar_con_simbolos", lambda f, d: (True, d / "mem", ""))
+    monkeypatch.setattr(tracer.shutil, "which", lambda nombre: "/usr/bin/gdb")
+    llamadas = []
+
+    def run(cmd, **kwargs):
+        llamadas.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=SALIDA_WINDOWS, stderr="")
+
+    monkeypatch.setattr(tracer.subprocess, "run", run)
+    snapshot = tracer.capturar_snapshot_gdb(fuente)
+
+    (cmd,) = llamadas
+    assert "-x" not in cmd
+    comandos = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-ex"]
+    assert comandos.index("info proc mappings") < comandos.index("info files") < comandos.index(
+        "print/x $_tlb->current_top_of_stack")
+    assert [b.direccion for b in snapshot.heap] == ["0x1d4f2c41450"]

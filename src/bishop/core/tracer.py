@@ -108,40 +108,41 @@ def capturar_snapshot_gdb(
             return _generar_snapshot_estatico(fuente_c, linea_corte or 1)
 
         bp = punto_corte or (f"{fuente_c.name}:{linea_corte}" if linea_corte else _detectar_punto_corte_optimo(fuente_c))
-        with tempfile.NamedTemporaryFile("w", suffix=".gdb", delete=False) as f_gdb:
-            gdb_script = f_gdb.name
-            f_gdb.write("set pagination off\n")
-            f_gdb.write("set confirm off\n")
-            f_gdb.write(f"break {bp}\n")
-            f_gdb.write("run\n")
-            f_gdb.write("echo ===BISHOP_LOCALS===\n")
-            f_gdb.write("info locals\n")
-            f_gdb.write("echo ===BISHOP_MAPPINGS===\n")
-            f_gdb.write("info proc mappings\n")
-            f_gdb.write("echo ===BISHOP_FRAME===\n")
-            f_gdb.write("info frame\n")
-            f_gdb.write("echo ===BISHOP_ARGS===\n")
-            f_gdb.write("info args\n")
+        # Cada comando va en su propio -ex: gdb sigue con el próximo aunque uno falle. Con un script
+        # (-x) el primer error corta el resto, y en Windows `info proc mappings` siempre falla: sin
+        # `info frame`, `info files` ni los límites de la pila, ningún puntero se reconocía como heap.
+        comandos = [
+            "set pagination off",
+            "set confirm off",
+            f"break {bp}",
+            "run",
+            "echo ===BISHOP_LOCALS===\\n",
+            "info locals",
+            "echo ===BISHOP_MAPPINGS===\\n",
+            "info proc mappings",
+            "echo ===BISHOP_FRAME===\\n",
+            "info frame",
+            "echo ===BISHOP_ARGS===\\n",
+            "info args",
             # Secciones del ejecutable y de las bibliotecas: sin /proc (Windows) es lo que permite
             # distinguir un puntero al heap de uno a datos estáticos.
-            f_gdb.write("echo ===BISHOP_FILES===\n")
-            f_gdb.write("info files\n")
-            # Límites de la pila en Windows (bloque de información del hilo, $_tlb). Va al final:
-            # en Linux $_tlb no existe y el error corta el resto del script.
-            f_gdb.write("echo ===BISHOP_TLB===\n")
-            f_gdb.write("print/x $_tlb->current_top_of_stack\n")
-            f_gdb.write("print/x $_tlb->current_bottom_of_stack\n")
-            f_gdb.write("quit\n")
-
+            "echo ===BISHOP_FILES===\\n",
+            "info files",
+            # Límites de la pila en Windows (bloque de información del hilo, $_tlb); en Linux no existe.
+            "echo ===BISHOP_TLB===\\n",
+            "print/x $_tlb->current_top_of_stack",
+            "print/x $_tlb->current_bottom_of_stack",
+            "kill",
+        ]
+        cmd = [gdb_bin, "-nx", "--batch"]
+        for comando in comandos:
+            cmd += ["-ex", comando]
         try:
-            cmd = [gdb_bin, "--batch", "-x", gdb_script, str(binario.resolve())]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            # En Windows gdb tarda más en arrancar (carga los símbolos de las DLL).
+            res = subprocess.run(cmd + [str(binario.resolve())], capture_output=True, text=True, timeout=20)
             return _parsear_salida_gdb_memoria(fuente_c, res.stdout, linea_corte or 1)
         except Exception:
             return _generar_snapshot_estatico(fuente_c, linea_corte or 1)
-        finally:
-            if os.path.exists(gdb_script):
-                os.remove(gdb_script)
 
 
 def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> SnapshotMemoria:
