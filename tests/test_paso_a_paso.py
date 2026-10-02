@@ -92,6 +92,16 @@ def test_con_stack_protector_el_primer_paso_no_es_la_llave(tmp_path, monkeypatch
     assert traza.salida == "suma: 15\nana\n"
 
 
+@con_gdb
+def test_lo_apuntado_no_lleva_el_simbolo_mas_cercano(tmp_path):
+    """gdb antepone el símbolo más cercano a lo que apunta un char *: `<texto> "hola"` para un arreglo
+    global y, en Windows, `<__mingw_module_is_dll+16> "ana"` para un literal (N-BISHOP-01)."""
+    fuente = _fuente(tmp_path, '#include <stdio.h>\nchar texto[] = "hola";\nint main(void)\n{\n'
+                               '    char *p = texto;\n    printf("%s\\n", p);\n    return 0;\n}\n', "global.c")
+    traza = trazar_paso_a_paso(fuente)
+    assert _variables(traza.pasos[-1])["p"]["apunta"] == '"hola"'
+
+
 def test_salida_de_windows_sin_retornos_de_carro():
     """En Windows el programa escribe en modo texto: «\\n» sale como «\\r\\n» (N-ECO-10)."""
     assert _texto_de_salida(b"suma: 15\r\nana\r\n", "replace", en_windows=True) == "suma: 15\nana\n"

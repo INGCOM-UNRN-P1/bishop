@@ -92,7 +92,9 @@ def describir(valor):
             apunta = None
             try:
                 if destino.code == gdb.TYPE_CODE_INT and destino.sizeof == 1:
-                    apunta = valor.format_string(max_elements=60, address=False)  # "ana"
+                    # Sin el símbolo más cercano: gdb antepone <texto> si apunta a un arreglo global
+                    # y, en Windows, cosas como <__mingw_module_is_dll+16> a un literal.
+                    apunta = valor.format_string(max_elements=60, address=False, symbols=False)  # "ana"
                 elif destino.code not in (gdb.TYPE_CODE_VOID, gdb.TYPE_CODE_FUNC):
                     apunta = str(valor.dereference())[:120]
             except (gdb.MemoryError, gdb.error, UnicodeDecodeError):
