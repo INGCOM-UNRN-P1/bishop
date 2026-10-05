@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
-from bishop.core.models import SnapshotMemoria, StackFrameMemoria, BloqueHeap, VariableMemoria
+from typing import List, Dict, Any
+from bishop.core.models import SnapshotMemoria, StackFrameMemoria
 
 
 def auditar_punteros_colgantes(snap: SnapshotMemoria) -> List[Dict[str, Any]]:

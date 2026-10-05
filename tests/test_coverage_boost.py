@@ -1,6 +1,5 @@
 """Tests adicionales para maximizar la cobertura en BISHOP."""
 
-import json
 from pathlib import Path
 from typer.testing import CliRunner
 from rich.console import Console

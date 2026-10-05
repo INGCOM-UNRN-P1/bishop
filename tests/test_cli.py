@@ -1,7 +1,6 @@
 """Tests de integración de la CLI de BISHOP."""
 
 import json
-from pathlib import Path
 from typer.testing import CliRunner
 from bishop.cli import app
 

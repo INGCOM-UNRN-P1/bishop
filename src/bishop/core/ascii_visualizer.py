@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import List, Dict, Any, Optional
-from bishop.core.models import SnapshotMemoria, StackFrameMemoria, BloqueHeap
+from bishop.core.models import SnapshotMemoria
 
 
 def render_ascii_punteros(snap: SnapshotMemoria) -> str:

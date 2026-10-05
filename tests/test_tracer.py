@@ -1,7 +1,5 @@
 """Tests unitarios para el trazador e inspeccionador de memoria en BISHOP."""
 
-from pathlib import Path
-import pytest
 from bishop.core.tracer import capturar_snapshot_gdb
 from bishop.core.visualizer import generar_mermaid_punteros
 
