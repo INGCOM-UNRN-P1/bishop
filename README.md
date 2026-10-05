@@ -99,6 +99,7 @@ bishop doctor [--json]
 
 | Comando | Descripción |
 |:--|:--|
+| `bishop diagram` | Diagrama de memoria (Stack y Heap) en Mermaid o ASCII, para enunciados y lecciones. |
 | `bishop trace` | Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del Stack y Heap. |
 | `bishop snapshot` | Toma una foto exacta del estado del Stack y Heap en una línea específica de código. |
 | `bishop heap` | Audita exclusivamente el estado del Heap, bloques activos y detección de punteros huérfanos. |
