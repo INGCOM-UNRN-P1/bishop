@@ -53,11 +53,35 @@ def snapshot_desde_dict(datos: Dict[str, Any], archivo: str = "traza.json") -> S
             tamanio_bytes=int(_campo(b, "tamanio_bytes", "size", defecto=0)),
             esta_liberado=bool(_campo(b, "esta_liberado", "is_freed", defecto=False)),
             contenido=str(_campo(b, "contenido", "preview", "content", defecto="...")),
+            punteros_salientes=list(_campo(b, "punteros_salientes", defecto=[])),
+            tipo=str(_campo(b, "tipo", defecto="")),
         )
         for b in _campo(datos, "heap", defecto=[])
     ]
-    return SnapshotMemoria(archivo=Path(archivo), linea=int(_campo(datos, "linea", "line", defecto=0) or 0),
+    snap = SnapshotMemoria(archivo=Path(archivo), linea=int(_campo(datos, "linea", "line", defecto=0) or 0),
                            frames=frames, heap=heap)
+    completar_referencias(snap)
+    return snap
+
+
+def completar_referencias(snap: SnapshotMemoria) -> None:
+    """Quién apunta a cada bloque (variables y otros bloques), los bytes activos y las fugas: un
+    bloque al que no llega ningún puntero ya no se puede liberar."""
+    por_direccion = {b.direccion.lower(): b for b in snap.heap}
+    for f in snap.frames:
+        for v in f.variables:
+            b = por_direccion.get((v.direccion_apuntada or "").lower())
+            if b is not None and v.nombre not in b.punteros_referenciantes:
+                b.punteros_referenciantes.append(v.nombre)
+    for origen in snap.heap:
+        for p in origen.punteros_salientes:
+            b = por_direccion.get(str(p.get("destino", "")).lower())
+            etiqueta = f"{origen.direccion}.{p.get('campo', '')}"
+            if b is not None and etiqueta not in b.punteros_referenciantes:
+                b.punteros_referenciantes.append(etiqueta)
+    activos = [b for b in snap.heap if not b.esta_liberado]
+    snap.total_bytes_heap_activos = sum(b.tamanio_bytes for b in activos)
+    snap.fugas_detectadas = sum(1 for b in activos if not b.punteros_referenciantes)
 
 
 def generar_diagrama(snap: SnapshotMemoria, formato: str = "mermaid") -> str:

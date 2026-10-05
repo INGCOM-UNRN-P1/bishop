@@ -29,6 +29,15 @@ def render_ascii_punteros(snap: SnapshotMemoria) -> str:
             else:
                 lineas.append(f"  ({v.tipo} {v.nombre} @ {v.direccion}) = {v.valor}")
 
+    # Los punteros dentro del heap (listas, matrices): cada bloque con sus flechas salientes.
+    con_salientes = [b for b in snap.heap if b.punteros_salientes]
+    if con_salientes:
+        lineas.append("\n[Heap: punteros entre bloques]")
+        for b in con_salientes:
+            flechas = "  ".join(f"--{p.get('campo')}--> {p.get('destino')}" for p in b.punteros_salientes)
+            lineas.append(f"  {b.direccion} {b.contenido}")
+            lineas.append(f"      {flechas}")
+
     return "\n".join(lineas)
 
 

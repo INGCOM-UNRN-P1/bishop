@@ -52,6 +52,7 @@ def renderizar_memoria_rich(snap: SnapshotMemoria, console: Console) -> None:
         tabla_heap.add_column("Estado", justify="center")
         tabla_heap.add_column("Contenido / Preview", style="dim")
         tabla_heap.add_column("Punteros Dueños", style="magenta")
+        tabla_heap.add_column("Apunta a", style="cyan")
 
         for b in snap.heap:
             estado_str = "[red]Liberado (free)[/red]" if b.esta_liberado else "[green]Activo (reservado)[/green]"
@@ -62,6 +63,7 @@ def renderizar_memoria_rich(snap: SnapshotMemoria, console: Console) -> None:
                 estado_str,
                 b.contenido,
                 ptrs_str,
+                ", ".join(f"{p.get('campo')} ➜ {p.get('destino')}" for p in b.punteros_salientes) or "—",
             )
 
         console.print(tabla_heap)
@@ -83,7 +85,10 @@ def generar_mermaid_punteros(snap: SnapshotMemoria) -> str:
         lineas.append("    subgraph Heap[Memoria Dinámica / Heap]")
         for b in snap.heap:
             b_id = f"heap_{b.direccion.replace('0x', '')}"
-            lineas.append(f'        {b_id}["Bloque ({b.tamanio_bytes} bytes)<br/>dir: {b.direccion}<br/>{b.contenido}"]')
+            estado = " LIBERADO" if b.esta_liberado else ""
+            tipo = f"{b.tipo} · " if b.tipo else ""
+            contenido = b.contenido.replace('"', "'")
+            lineas.append(f'        {b_id}["{tipo}{b.tamanio_bytes} bytes{estado}<br/>dir: {b.direccion}<br/>{contenido}"]')
         lineas.append("    end")
 
     # Flechas de punteros
@@ -106,5 +111,15 @@ def generar_mermaid_punteros(snap: SnapshotMemoria) -> str:
 
                 if target_id:
                     lineas.append(f"    {v_id} == desreferencia ==> {target_id}")
+
+    # Punteros guardados en el heap: `sig`/`ant` de una lista (doble o circular), las filas de una
+    # matriz `int **` (QoL #58, #49). Un par sig/ant entre dos nodos queda como dos flechas opuestas.
+    en_heap = {b.direccion.lower() for b in snap.heap}
+    for b in snap.heap:
+        origen = f"heap_{b.direccion.replace('0x', '')}"
+        for p in b.punteros_salientes:
+            destino = str(p.get("destino", ""))
+            if destino.lower() in en_heap:
+                lineas.append(f"    {origen} -- {p.get('campo', '')} --> heap_{destino.replace('0x', '')}")
 
     return "\n".join(lineas)

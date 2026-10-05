@@ -46,6 +46,10 @@ class BloqueHeap:
     esta_liberado: bool = False
     contenido: str = "..."
     punteros_referenciantes: List[str] = field(default_factory=list)
+    # Punteros guardados DENTRO del bloque (campo o elemento → dirección): `sig`/`ant` de una lista
+    # doblemente enlazada, las filas de una matriz `int **` (QoL #58, #49).
+    punteros_salientes: List[Dict[str, str]] = field(default_factory=list)
+    tipo: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -61,6 +65,8 @@ class BloqueHeap:
             "preview": self.contenido,
             "punteros_referenciantes": self.punteros_referenciantes,
             "pointers": self.punteros_referenciantes,
+            "punteros_salientes": self.punteros_salientes,
+            "tipo": self.tipo,
         }
 
 

@@ -108,6 +108,15 @@ def capturar_snapshot_gdb(
             return _generar_snapshot_estatico(fuente_c, linea_corte or 1)
 
         bp = punto_corte or (f"{fuente_c.name}:{linea_corte}" if linea_corte else _detectar_punto_corte_optimo(fuente_c))
+        # Primero con la API Python de gdb: direcciones y tipos reales y el heap recorrido por sus
+        # punteros. Si gdb no tiene Python (o falla), queda el parseo de texto de abajo.
+        try:
+            from bishop.core.diagrama import snapshot_desde_dict
+            from bishop.core.snapshot_gdb import ErrorDeSnapshot, capturar_con_python_gdb
+
+            return snapshot_desde_dict(capturar_con_python_gdb(fuente_c, bp), str(fuente_c))
+        except (ErrorDeSnapshot, OSError, ValueError, KeyError):
+            pass
         # Cada comando va en su propio -ex: gdb sigue con el próximo aunque uno falle. Con un script
         # (-x) el primer error corta el resto, y en Windows `info proc mappings` siempre falla: sin
         # `info frame`, `info files` ni los límites de la pila, ningún puntero se reconocía como heap.

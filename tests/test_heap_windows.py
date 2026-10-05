@@ -77,6 +77,13 @@ def test_un_comando_que_falla_no_corta_los_siguientes(monkeypatch, tmp_path):
         return subprocess.CompletedProcess(cmd, 0, stdout=SALIDA_WINDOWS, stderr="")
 
     monkeypatch.setattr(tracer.subprocess, "run", run)
+    # Este test es del camino de texto, el respaldo cuando gdb no tiene Python.
+    from bishop.core import snapshot_gdb
+
+    def sin_python(*args, **kwargs):
+        raise snapshot_gdb.ErrorDeSnapshot("gdb sin Python")
+
+    monkeypatch.setattr(snapshot_gdb, "capturar_con_python_gdb", sin_python)
     snapshot = tracer.capturar_snapshot_gdb(fuente)
 
     (cmd,) = llamadas
