@@ -67,3 +67,13 @@ def test_diagramas_con_flechas_entre_bloques(datos):
     assert " -- [1] --> " in mermaid
     assert "--sig-->" in generar_diagrama(snap, "ascii")
     assert snap.fugas_detectadas == 0
+
+
+def test_diagrama_typst(datos, tmp_path):
+    texto = generar_diagrama(snapshot_desde_dict(datos, FUENTE.name), "typst")
+    assert texto.startswith("// Diagrama de memoria") and 'raw("Nodo * a")' in texto and "sig → " in texto
+    typst = shutil.which("typst")
+    if typst:
+        destino = tmp_path / "mem.typ"
+        destino.write_text(texto, encoding="utf-8")
+        assert subprocess.run([typst, "compile", str(destino), str(tmp_path / "mem.pdf")], capture_output=True).returncode == 0

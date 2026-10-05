@@ -12,7 +12,7 @@ BISHOP es una herramienta standalone diseñada para inspeccionar y visualizar el
 - Inspección, análisis y representación visual de memoria en tiempo de ejecución para programas C.
 - Trazado de marcos de llamada de pila (Stack Frames), variables locales y parámetros.
 - Representación de punteros, relaciones de direccionamiento e indirecciones multinivel.
-- Monitoreo de memoria dinámica en el Heap (`malloc`, `calloc`, `realloc`, `free`). El snapshot se toma con la API Python de gdb: las variables con su dirección y tipo reales, cada bloque con el tamaño pedido (se interceptan las reservas y las liberaciones, así que un puntero a un bloque ya liberado se marca) y los punteros que guarda adentro. Por eso las listas simples, dobles y circulares, los árboles y las matrices `int **` se dibujan con todas sus flechas (en Mermaid, en ASCII y en la tabla del heap). Si gdb no tiene Python, queda el análisis de la salida de texto.
+- Monitoreo de memoria dinámica en el Heap (`malloc`, `calloc`, `realloc`, `free`). El snapshot se toma con la API Python de gdb: las variables con su dirección y tipo reales, cada bloque con el tamaño pedido (se interceptan las reservas y las liberaciones, así que un puntero a un bloque ya liberado se marca) y los punteros que guarda adentro. Con `bishop diagram --formato typst` el diagrama sale en Typst (dos columnas, pila y heap, con los punteros marcados ①, ②…), listo para los exámenes que arma alucarD. Por eso las listas simples, dobles y circulares, los árboles y las matrices `int **` se dibujan con todas sus flechas (en Mermaid, en ASCII y en la tabla del heap). Si gdb no tiene Python, queda el análisis de la salida de texto.
 - Renderizado multi-formato: tablas de texto plano, consola interactiva Rich y diagramas Mermaid.
 - Ejecución paso a paso visual, un «Python Tutor para C» (`bishop trace --html`): con la API Python de gdb ejecuta línea por línea y genera una página navegable con el código, la pila de llamadas con sus variables (resaltando lo que cambió) y la salida del programa en cada paso.
 
@@ -99,7 +99,7 @@ bishop doctor [--json]
 
 | Comando | Descripción |
 |:--|:--|
-| `bishop diagram` | Diagrama de memoria (Stack y Heap) en Mermaid o ASCII, para enunciados y lecciones. |
+| `bishop diagram` | Diagrama de memoria (Stack y Heap) en Mermaid, ASCII o Typst, para enunciados, lecciones y exámenes. |
 | `bishop trace` | Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del Stack y Heap. |
 | `bishop snapshot` | Toma una foto exacta del estado del Stack y Heap en una línea específica de código. |
 | `bishop heap` | Audita exclusivamente el estado del Heap, bloques activos y detección de punteros huérfanos. |

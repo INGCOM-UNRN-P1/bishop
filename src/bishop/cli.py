@@ -93,11 +93,11 @@ def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
 @app.command("diagram")
 def diagram_cmd(
     entrada: Path = typer.Argument(..., exists=True, dir_okay=False, help="Fuente C (memoria real) o traza JSON (frames/stack y heap)."),
-    formato: str = typer.Option("mermaid", "--formato", "-f", help="mermaid o ascii."),
+    formato: str = typer.Option("mermaid", "--formato", "-f", help="mermaid, ascii o typst (para exámenes en Typst)."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Con un fuente C: función o línea donde tomar la memoria."),
     salida: Optional[Path] = typer.Option(None, "--output", "-o", help="Guardar el diagrama en un archivo."),
 ) -> None:
-    """Diagrama de memoria (Stack y Heap) en Mermaid o ASCII, para enunciados y lecciones."""
+    """Diagrama de memoria (Stack y Heap) en Mermaid, ASCII o Typst, para enunciados, lecciones y exámenes."""
     from bishop.core.diagrama import FORMATOS, diagrama_de_fuente, generar_diagrama, snapshot_desde_dict
 
     if formato not in FORMATOS:

@@ -14,7 +14,7 @@ from bishop.core.ascii_visualizer import render_ascii_punteros
 from bishop.core.models import BloqueHeap, SnapshotMemoria, StackFrameMemoria, VariableMemoria
 from bishop.core.visualizer import generar_mermaid_punteros
 
-FORMATOS = ("mermaid", "ascii")
+FORMATOS = ("mermaid", "ascii", "typst")
 
 
 def _campo(d: Dict[str, Any], *claves: str, defecto: Any = None) -> Any:
@@ -87,6 +87,9 @@ def completar_referencias(snap: SnapshotMemoria) -> None:
 def generar_diagrama(snap: SnapshotMemoria, formato: str = "mermaid") -> str:
     if formato not in FORMATOS:
         raise ValueError(f"formato «{formato}» desconocido: usá {' o '.join(FORMATOS)}")
+    if formato == "typst":
+        from bishop.core.typst import generar_typst
+        return generar_typst(snap)
     return generar_mermaid_punteros(snap) if formato == "mermaid" else render_ascii_punteros(snap)
 
 
