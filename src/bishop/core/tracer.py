@@ -199,8 +199,8 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
             frame_addr = int(m_frame.group(1), 16)
     if "===BISHOP_FILES===" in gdb_output:
         sec_files = gdb_output.split("===BISHOP_FILES===")[1].split("===BISHOP_TLB===")[0]
-        for m_sec in re.finditer(r"(0x[0-9a-fA-F]+)\s*-\s*(0x[0-9a-fA-F]+)\s+is\s+\S+", sec_files):
-            static_ranges.append((int(m_sec.group(1), 16), int(m_sec.group(2), 16)))
+        for m_rango in re.finditer(r"(0x[0-9a-fA-F]+)\s*-\s*(0x[0-9a-fA-F]+)\s+is\s+\S+", sec_files):
+            static_ranges.append((int(m_rango.group(1), 16), int(m_rango.group(2), 16)))
     # En Windows, la pila del hilo: entre current_bottom_of_stack y current_top_of_stack del TIB. Ahí
     # la pila y el heap pueden quedar a menos de 1 MiB, así que la distancia al frame no alcanza.
     if "===BISHOP_TLB===" in gdb_output:
@@ -265,21 +265,21 @@ def _parsear_salida_gdb_memoria(fuente: Path, gdb_output: str, linea: int) -> Sn
 
     heap_bloques: List[BloqueHeap] = []
     bloques_vistos = set()
-    for v in variables:
-        if v.es_puntero and v.direccion_apuntada and _es_direccion_heap(v.direccion_apuntada):
-            addr_norm = v.direccion_apuntada.lower()
+    for var in variables:
+        if var.es_puntero and var.direccion_apuntada and _es_direccion_heap(var.direccion_apuntada):
+            addr_norm = var.direccion_apuntada.lower()
             if addr_norm not in bloques_vistos:
                 bloques_vistos.add(addr_norm)
                 heap_bloques.append(BloqueHeap(
-                    direccion=v.direccion_apuntada,
+                    direccion=var.direccion_apuntada,
                     tamanio_bytes=32,
-                    punteros_referenciantes=[v.nombre],
+                    punteros_referenciantes=[var.nombre],
                 ))
             else:
                 # Agregar puntero referenciante adicional
                 for b in heap_bloques:
-                    if b.direccion.lower() == addr_norm and v.nombre not in b.punteros_referenciantes:
-                        b.punteros_referenciantes.append(v.nombre)
+                    if b.direccion.lower() == addr_norm and var.nombre not in b.punteros_referenciantes:
+                        b.punteros_referenciantes.append(var.nombre)
 
     return SnapshotMemoria(
         archivo=fuente,

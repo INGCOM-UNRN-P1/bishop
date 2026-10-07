@@ -516,7 +516,7 @@ def doctor_cmd(
     for c in diagnostico:
         color = "bold green" if c["estado"] == "OK" else "bold red"
         simbolo = "✓" if c["estado"] == "OK" else "✗"
-        tabla.add_row(c["componente"], f"[{color}]{simbolo} {c['estado']}[/{color}]", c["detalle"])
+        tabla.add_row(str(c["componente"]), f"[{color}]{simbolo} {c['estado']}[/{color}]", str(c["detalle"]))
 
     console.print(tabla)
     if not todo_ok:
