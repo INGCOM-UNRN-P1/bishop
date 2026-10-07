@@ -108,7 +108,7 @@ def diagram_cmd(
             datos = json.loads(entrada.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             err_console.print(f"[bold red]Error:[/bold red] {entrada} no es un JSON válido ({exc}).")
-            raise typer.Exit(code=2)
+            raise typer.Exit(code=2) from exc
         diagrama = generar_diagrama(snapshot_desde_dict(datos, entrada.name), formato)
     else:
         _validar_fuente_c(entrada)
@@ -143,7 +143,7 @@ def trace_cmd(
             traza = trazar_paso_a_paso(fuente, entrada=entrada, inicio=punto_corte or "main", max_pasos=max_pasos)
         except ErrorDeTraza as exc:
             err_console.print(f"[bold red]Error:[/bold red] {exc}")
-            raise typer.Exit(code=2)
+            raise typer.Exit(code=2) from exc
         if not traza.pasos:
             err_console.print(f"[bold red]Error:[/bold red] no se registró ningún paso: ¿el programa llega a "
                               f"'{punto_corte or 'main'}'?")

@@ -74,7 +74,7 @@ def generar_mermaid_punteros(snap: SnapshotMemoria) -> str:
     lineas = ["graph LR", "    subgraph Stack[Pila / Variables Locales]"]
 
     # Agregar variables de stack
-    for idx, f in enumerate(snap.frames):
+    for _idx, f in enumerate(snap.frames):
         for v in f.variables:
             v_id = f"var_{f.funcion}_{v.nombre}"
             lineas.append(f'        {v_id}["{v.tipo} {v.nombre}<br/>dir: {v.direccion}<br/>val: {v.valor}"]')
