@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 MAX_PASOS = 300
+# Con --hasta-falla, cuántos pasos se cuentan como mucho buscando la falla (la primera pasada no lee la
+# pila, así que es rápida; una recursión infinita llega antes con --limite-pila).
+TOPE_HASTA_FALLA = 200_000
 
 SCRIPT_GDB = r'''
 import json, os
@@ -34,7 +37,7 @@ def nombre_de(ruta):
 
 
 NOMBRES = {nombre_de(f) for f in CONFIG["fuentes"]}
-pasos, estado = [], {"senal": None, "codigo_salida": None, "truncado": False}
+pasos, estado = [], {"senal": None, "codigo_salida": None, "truncado": False, "omitidos": 0}
 
 
 def _al_detenerse(evento):
@@ -174,41 +177,78 @@ comilla = '"' if os.name == "nt" else "'"
 redireccion = " > " + comilla + CONFIG["salida_programa"] + comilla + " 2>&1"
 if CONFIG.get("entrada"):
     redireccion = " < " + comilla + CONFIG["entrada"] + comilla + redireccion
-gdb.execute("run" + redireccion, to_string=True)
+redireccion = "".join(" " + comilla + a + comilla for a in CONFIG.get("argumentos", [])) + redireccion
 
-saltos_seguidos = 0
-while True:
-    try:
-        marco = gdb.selected_frame()
-        sal = marco.find_sal()
-    except gdb.error:
-        break  # el programa terminó
-    if not en_fuente(sal):
+
+def ejecutar():
+    gdb.execute("run" + redireccion, to_string=True)
+    # La pila del hilo principal crece a demanda y el kernel controla el límite al crecer: bajarlo
+    # con el programa detenido al principio alcanza (con un exec-wrapper, prlimit y stdbuf encadenados
+    # gdb no llega a poner el breakpoint).
+    if CONFIG.get("limite_pila"):
+        import resource
+        limite = CONFIG["limite_pila"]
+        resource.prlimit(gdb.selected_inferior().pid, resource.RLIMIT_STACK, (limite, limite))
+
+
+def recorrer(desde, hasta, tope):
+    """Avanza línea por línea y guarda los pasos con índice en [desde, hasta); cuenta hasta `tope`."""
+    global anterior
+    contados, saltos_seguidos = 0, 0
+    while True:
         try:
-            gdb.execute("finish", to_string=True)  # una función de la biblioteca: volver al código
+            marco = gdb.selected_frame()
+            sal = marco.find_sal()
         except gdb.error:
+            break  # el programa terminó
+        if not en_fuente(sal):
+            try:
+                gdb.execute("finish", to_string=True)  # una función de la biblioteca: volver al código
+            except gdb.error:
+                break
+            continue
+        if saltos_seguidos < 3 and en_la_llave_de_apertura(marco, sal):
+            saltos_seguidos += 1
+            try:
+                gdb.execute("step", to_string=True)
+            except gdb.error:
+                break
+            continue
+        saltos_seguidos = 0
+        if contados >= tope:
+            estado["truncado"] = True
             break
-        continue
-    if saltos_seguidos < 3 and en_la_llave_de_apertura(marco, sal):
-        saltos_seguidos += 1
+        if desde <= contados < hasta:
+            pasos.append({"linea": sal.line, "archivo": os.path.basename(sal.symtab.filename),
+                          "funcion": marco.name(), "pila": pila(), "salida": salida_hasta_ahora(),
+                          "senal": estado["senal"]})
+        contados += 1
+        if estado["senal"]:
+            break  # el programa recibió una señal (SIGSEGV…): el último paso muestra dónde
         try:
             gdb.execute("step", to_string=True)
         except gdb.error:
             break
-        continue
-    saltos_seguidos = 0
-    if len(pasos) >= CONFIG["max_pasos"]:
-        estado["truncado"] = True
-        break
-    pasos.append({"linea": sal.line, "archivo": os.path.basename(sal.symtab.filename),
-                  "funcion": marco.name(), "pila": pila(), "salida": salida_hasta_ahora(),
-                  "senal": estado["senal"]})
-    if estado["senal"]:
-        break  # el programa recibió una señal (SIGSEGV…): el último paso muestra dónde
-    try:
-        gdb.execute("step", to_string=True)
-    except gdb.error:
-        break
+    return contados
+
+
+ejecutar()
+if not CONFIG.get("hasta_falla"):
+    recorrer(0, CONFIG["max_pasos"], CONFIG["max_pasos"])
+else:
+    # Hasta la falla: una primera pasada cuenta los pasos (guarda sólo los primeros, por si el programa
+    # no falla) y, si la falla llega después de la ventana, una segunda ejecución idéntica guarda los
+    # últimos `max_pasos`. Así la pila y las variables se leen sólo en los pasos que se muestran.
+    total = recorrer(0, CONFIG["max_pasos"], CONFIG["tope"])
+    if estado["senal"] and total > CONFIG["max_pasos"]:
+        pasos.clear()
+        anterior = []
+        estado.update(senal=None, codigo_salida=None, truncado=False)
+        ejecutar()
+        estado["omitidos"] = total - CONFIG["max_pasos"]
+        recorrer(estado["omitidos"], total, total)
+    elif total > CONFIG["max_pasos"]:
+        estado["truncado"] = True  # terminó (o llegó al tope) sin fallar: quedan los primeros pasos
 
 try:
     gdb.execute("kill", to_string=True)
@@ -231,11 +271,14 @@ class TrazaPasoAPaso:
     codigo_salida: Optional[int] = None
     truncado: bool = False
     max_pasos: int = MAX_PASOS
+    # Con --hasta-falla, los pasos anteriores a la ventana que no se guardaron (el primero que se
+    # muestra es el número omitidos + 1).
+    omitidos: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {"schema_version": "1.0.0", "fuente": self.fuente, "pasos": self.pasos, "salida": self.salida,
                 "senal": self.senal, "codigo_salida": self.codigo_salida, "truncado": self.truncado,
-                "max_pasos": self.max_pasos}
+                "max_pasos": self.max_pasos, "omitidos": self.omitidos}
 
 
 def _texto_de_salida(crudo: bytes, errors: str, en_windows: bool = os.name == "nt") -> str:
@@ -245,8 +288,17 @@ def _texto_de_salida(crudo: bytes, errors: str, en_windows: bool = os.name == "n
 
 
 def trazar_paso_a_paso(fuente: Path, entrada: Optional[Path] = None, inicio: str = "main",
-                       max_pasos: int = MAX_PASOS, timeout: float = 60.0) -> TrazaPasoAPaso:
-    """Compila `fuente` con -g y la ejecuta paso a paso dentro de gdb."""
+                       max_pasos: int = MAX_PASOS, timeout: float = 60.0, argumentos: Optional[List[str]] = None,
+                       hasta_falla: bool = False, limite_pila_kb: Optional[int] = None) -> TrazaPasoAPaso:
+    """Compila `fuente` con -g y la ejecuta paso a paso dentro de gdb.
+
+    Con `hasta_falla`, los `max_pasos` que se guardan son los últimos antes de la señal (si el programa
+    falla) en vez de los primeros: la página abre en el paso exacto de la falla. `limite_pila_kb` achica
+    la pila del programa (sólo en Linux), así una recursión infinita llega al Stack Overflow en pocos
+    miles de pasos y no en cientos de miles.
+    """
+    if limite_pila_kb and os.name == "nt":
+        raise ErrorDeTraza("--limite-pila sólo funciona en Linux.")
     from bishop.core.tracer import compilar_con_simbolos
 
     gdb = shutil.which("gdb")
@@ -261,9 +313,13 @@ def trazar_paso_a_paso(fuente: Path, entrada: Optional[Path] = None, inicio: str
             "fuentes": [os.path.realpath(fuente)],
             "inicio": inicio,
             "max_pasos": max_pasos,
+            "hasta_falla": hasta_falla,
+            "tope": TOPE_HASTA_FALLA,
+            "argumentos": list(argumentos or []),
             "entrada": str(entrada.resolve()) if entrada else None,
             "salida_programa": str(directorio / "salida.txt"),
             "resultado": str(directorio / "traza.json"),
+            "limite_pila": limite_pila_kb * 1024 if limite_pila_kb else None,
             # Sin búfer, la salida aparece en el paso que la imprime y no recién al final. stdbuf usa
             # LD_PRELOAD, que en Windows no existe: ahí la salida aparece cuando el programa la vuelca.
             "envoltorio": "stdbuf -o0 -e0" if shutil.which("stdbuf") and os.name != "nt" else None,
@@ -275,7 +331,9 @@ def trazar_paso_a_paso(fuente: Path, entrada: Optional[Path] = None, inicio: str
             res = subprocess.run([gdb, "-nx", "-batch", "-x", str(directorio / "traza.py"), str(binario)],
                                  capture_output=True, text=True, timeout=timeout, env=entorno)
         except subprocess.TimeoutExpired:
-            raise ErrorDeTraza(f"la traza superó {timeout:g} s: probá con menos pasos (--max-steps).") from None
+            consejo = ("con una recursión infinita, achicá la pila (--limite-pila 64)" if hasta_falla
+                       else "probá con menos pasos (--max-steps)")
+            raise ErrorDeTraza(f"la traza superó {timeout:g} s: {consejo}.") from None
         resultado = directorio / "traza.json"
         if not resultado.is_file():
             raise ErrorDeTraza("gdb no pudo trazar el programa:\n" + (res.stderr or res.stdout).strip()[-1500:])
@@ -288,4 +346,4 @@ def trazar_paso_a_paso(fuente: Path, entrada: Optional[Path] = None, inicio: str
     salida = _texto_de_salida(crudo, errors="replace")
     return TrazaPasoAPaso(fuente=str(fuente), pasos=datos["pasos"], salida=salida, senal=datos.get("senal"),
                           codigo_salida=datos.get("codigo_salida"), truncado=datos.get("truncado", False),
-                          max_pasos=max_pasos)
+                          max_pasos=max_pasos, omitidos=datos.get("omitidos", 0))

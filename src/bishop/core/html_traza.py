@@ -4,6 +4,9 @@ Autocontenida (sin bibliotecas ni red): el código con la próxima línea a ejec
 ejecutada en otro tono, la pila de llamadas con sus variables (lo que cambió respecto del paso anterior,
 resaltado; los punteros, con lo que apuntan) y la salida del programa hasta ese paso. Se navega con los
 botones, el deslizador o las flechas del teclado.
+
+Si el programa terminó por una señal, la página abre en el paso de la falla; `#paso-N` en la dirección
+abre el paso N (contado desde el principio de la ejecución, aunque la traza guarde sólo los últimos).
 """
 
 from __future__ import annotations
@@ -114,7 +117,7 @@ que cambiaron respecto del paso anterior se resaltan. Generado por bishop trace 
 (function () {
   "use strict";
   var datos = JSON.parse(document.getElementById("datos").textContent);
-  var pasos = datos.pasos, actual = 0;
+  var pasos = datos.pasos, actual = 0, omitidos = datos.omitidos || 0;
   var $ = function (id) { return document.getElementById(id); };
   var deslizador = $("deslizador");
   deslizador.max = Math.max(pasos.length - 1, 0);
@@ -149,7 +152,7 @@ que cambiaron respecto del paso anterior se resaltan. Generado por bishop trace 
     actual = Math.max(0, Math.min(i, pasos.length - 1));
     var paso = pasos[actual], previo = actual > 0 ? pasos[actual - 1] : null;
     deslizador.value = actual;
-    $("contador").textContent = "Paso " + (actual + 1) + " de " + pasos.length;
+    $("contador").textContent = "Paso " + (omitidos + actual + 1) + " de " + (omitidos + pasos.length);
     $("inicio").disabled = $("atras").disabled = actual === 0;
     $("adelante").disabled = $("fin").disabled = actual === pasos.length - 1;
 
@@ -166,6 +169,10 @@ que cambiaron respecto del paso anterior se resaltan. Generado por bishop trace 
         "con código " + datos.codigo_salida + ".";
     } else {
       estado.textContent = "Línea " + paso.linea + " de " + paso.funcion + "(): es la próxima a ejecutar.";
+    }
+    if (actual === 0 && omitidos) {
+      estado.textContent += " (Los " + omitidos + " pasos anteriores no se guardaron: la traza muestra los " +
+        "últimos " + pasos.length + " antes de la falla.)";
     }
 
     var codigo = $("codigo");
@@ -228,7 +235,17 @@ que cambiaron respecto del paso anterior se resaltan. Generado por bishop trace 
     else if (e.key === "Home") { mostrar(0); e.preventDefault(); }
     else if (e.key === "End") { mostrar(pasos.length - 1); e.preventDefault(); }
   });
-  mostrar(0);
+  // Si el programa falló, abre en el paso de la falla; #paso-N abre el paso N.
+  function pedido() {
+    var m = /^#paso-(\\d+)$/.exec(window.location.hash);
+    return m ? parseInt(m[1], 10) - 1 - omitidos : null;
+  }
+  var inicial = pedido();
+  mostrar(inicial !== null ? inicial : (datos.senal ? pasos.length - 1 : 0));
+  window.addEventListener("hashchange", function () {
+    var i = pedido();
+    if (i !== null) mostrar(i);
+  });
 })();
 </script>
 </body>

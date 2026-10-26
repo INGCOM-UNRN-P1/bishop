@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from yutani.cli import crear_app
@@ -124,6 +124,7 @@ def diagram_cmd(
 @app.command("trace")
 def trace_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a trazar e inspeccionar."),
+    argumentos: Optional[List[str]] = typer.Argument(None, help="Argumentos para el programa (con --html)."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Función o línea donde pausar la ejecución (ej: 'invertir_vector', 'main:15')."),
     mermaid_view: bool = typer.Option(False, "--mermaid", "-m", help="Emitir diagrama de punteros en formato Mermaid."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en formato JSON."),
@@ -131,6 +132,8 @@ def trace_cmd(
     html_salida: Optional[Path] = typer.Option(None, "--html", help="Ejecutar línea por línea y guardar una página HTML navegable con el código, la pila y la salida en cada paso."),
     entrada: Optional[Path] = typer.Option(None, "--input", "-i", exists=True, dir_okay=False, help="Archivo para la entrada estándar del programa (con --html)."),
     max_pasos: int = typer.Option(300, "--max-steps", min=1, max=5000, help="Máximo de pasos de la traza (con --html)."),
+    hasta_falla: bool = typer.Option(False, "--hasta-falla", help="Con --html: guardar los últimos --max-steps pasos antes de la falla (SIGSEGV…) y abrir la página en ella."),
+    limite_pila: Optional[int] = typer.Option(None, "--limite-pila", min=16, help="Con --html: pila del programa en KiB (con una recursión infinita, 64 llega rápido al Stack Overflow)."),
 ) -> None:
     """Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del Stack y Heap."""
     _validar_fuente_c(fuente)
@@ -140,7 +143,9 @@ def trace_cmd(
         from bishop.core.paso_a_paso import ErrorDeTraza, trazar_paso_a_paso
 
         try:
-            traza = trazar_paso_a_paso(fuente, entrada=entrada, inicio=punto_corte or "main", max_pasos=max_pasos)
+            traza = trazar_paso_a_paso(fuente, entrada=entrada, inicio=punto_corte or "main", max_pasos=max_pasos,
+                                       argumentos=argumentos, hasta_falla=hasta_falla, limite_pila_kb=limite_pila,
+                                       timeout=180.0 if hasta_falla else 60.0)
         except ErrorDeTraza as exc:
             err_console.print(f"[bold red]Error:[/bold red] {exc}")
             raise typer.Exit(code=2) from exc
@@ -153,7 +158,7 @@ def trace_cmd(
         if json_output:
             print(json.dumps(traza.to_dict(), indent=2, ensure_ascii=False))
             raise typer.Exit(code=0)
-        final = (f"terminó por {traza.senal}" if traza.senal
+        final = (f"terminó por {traza.senal}; la página abre en ese paso" if traza.senal
                  else f"se cortó a los {max_pasos} pasos" if traza.truncado
                  else f"terminó con código {traza.codigo_salida}")
         console.print(f"[green]✓ Traza de {len(traza.pasos)} pasos en:[/green] [cyan]{html_salida}[/cyan] "

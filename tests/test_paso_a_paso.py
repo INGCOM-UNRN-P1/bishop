@@ -154,3 +154,70 @@ def test_sin_gdb(monkeypatch, tmp_path):
     monkeypatch.setattr("bishop.core.paso_a_paso.shutil.which", lambda nombre: None)
     with pytest.raises(ErrorDeTraza, match="gdb"):
         trazar_paso_a_paso(_fuente(tmp_path))
+
+
+BUCLE_Y_SEGV = """\
+#include <stdio.h>
+
+int main(int argc, char *argv[])
+{
+    int suma = 0;
+    for (int i = 0; i < 200; i++) {
+        suma += i;
+    }
+    printf("%d %s\\n", suma, argc > 1 ? argv[1] : "-");
+    int *p = NULL;
+    return *p;
+}
+"""
+
+
+@con_gdb
+def test_hasta_falla_guarda_los_ultimos_pasos(tmp_path):
+    """Ola 10: la ventana de pasos termina en la falla y cuenta los omitidos; los argumentos llegan."""
+    fuente = _fuente(tmp_path, BUCLE_Y_SEGV, "bucle.c")
+    traza = trazar_paso_a_paso(fuente, max_pasos=10, hasta_falla=True, argumentos=["hola mundo"])
+    assert traza.senal == "SIGSEGV" and len(traza.pasos) == 10 and not traza.truncado
+    assert traza.pasos[-1]["linea"] == 11 and traza.pasos[-1]["senal"] == "SIGSEGV"
+    assert traza.omitidos > 300 and traza.to_dict()["omitidos"] == traza.omitidos
+    assert traza.salida == "19900 hola mundo\n"
+    # Sin --hasta-falla, los mismos 10 pasos son los primeros.
+    primeros = trazar_paso_a_paso(fuente, max_pasos=10)
+    assert primeros.truncado and primeros.omitidos == 0 and primeros.pasos[0]["linea"] == 5
+
+
+@con_gdb
+def test_hasta_falla_sin_falla_quedan_los_primeros(tmp_path):
+    traza = trazar_paso_a_paso(_fuente(tmp_path), max_pasos=5, hasta_falla=True)
+    assert traza.truncado and not traza.senal and traza.omitidos == 0 and traza.pasos[0]["linea"] == 14
+
+
+@con_gdb
+@pytest.mark.skipif(os.name == "nt", reason="el límite de pila es de Linux")
+def test_limite_de_pila_acorta_la_recursion_infinita(tmp_path):
+    fuente = _fuente(tmp_path, "int f(int n)\n{\n    return n + f(n - 1);\n}\n\nint main(void)\n{\n"
+                               "    return f(3);\n}\n", "rec.c")
+    traza = trazar_paso_a_paso(fuente, max_pasos=5, hasta_falla=True, limite_pila_kb=32)
+    assert traza.senal == "SIGSEGV" and traza.pasos[-1]["funcion"] == "f" and traza.omitidos > 100
+
+
+def test_html_abre_en_la_falla(tmp_path):
+    fuente = _fuente(tmp_path)
+    traza = TrazaPasoAPaso(fuente=str(fuente), pasos=[{"linea": 14, "archivo": "suma.c", "funcion": "main",
+                                                       "pila": [], "salida": 0, "senal": "SIGSEGV"}],
+                           senal="SIGSEGV", omitidos=40)
+    pagina = generar_html_traza(traza)
+    assert '"omitidos": 40' in pagina and "datos.senal ? pasos.length - 1 : 0" in pagina
+    assert "/^#paso-(\\d+)$/" in pagina
+
+
+@con_gdb
+def test_cli_hasta_falla(tmp_path):
+    fuente = _fuente(tmp_path, BUCLE_Y_SEGV, "bucle.c")
+    pagina = tmp_path / "falla.html"
+    res = runner.invoke(app, ["trace", str(fuente), "x", "--html", str(pagina), "--hasta-falla", "--max-steps", "8"])
+    assert res.exit_code == 0, res.output
+    assert "SIGSEGV" in res.output and "abre en ese paso" in res.output
+    datos = json.loads(re.search(r'id="datos">(.*?)</script>', pagina.read_text(encoding="utf-8"), re.S)
+                       .group(1).replace("<\\/", "</"))
+    assert len(datos["pasos"]) == 8 and datos["omitidos"] > 0 and datos["pasos"][-1]["linea"] == 11
