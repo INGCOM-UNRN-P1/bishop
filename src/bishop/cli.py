@@ -96,22 +96,49 @@ def diagram_cmd(
     formato: str = typer.Option("mermaid", "--formato", "-f", help="mermaid, ascii o typst (para exámenes en Typst)."),
     punto_corte: Optional[str] = typer.Option(None, "--break", "-b", help="Con un fuente C: función o línea donde tomar la memoria."),
     salida: Optional[Path] = typer.Option(None, "--output", "-o", help="Guardar el diagrama en un archivo."),
+    tda: Optional[str] = typer.Option(None, "--tda", help="Dibujar la forma de un TDA recursivo: arbol o lista (en mermaid o typst)."),
+    raiz: Optional[str] = typer.Option(None, "--raiz", help="Con --tda y un fuente C: la variable que apunta al TDA."),
 ) -> None:
-    """Diagrama de memoria (Stack y Heap) en Mermaid, ASCII o Typst, para enunciados, lecciones y exámenes."""
+    """Diagrama de memoria (Stack y Heap) en Mermaid, ASCII o Typst, para enunciados, lecciones y exámenes.
+
+    Con --tda, la forma del TDA (un árbol con cada hijo en su lado, una lista con sus enlaces) desde la
+    memoria real de un fuente C o desde un JSON escrito a mano: {"dato": 8, "izq": {...}, "der": null}
+    para un árbol, [1, 2, 3] o {"valores": [...], "doble": true} para una lista.
+    """
     from bishop.core.diagrama import FORMATOS, diagrama_de_fuente, generar_diagrama, snapshot_desde_dict
+    from bishop.core.tda import (ErrorDeTDA, estructura_desde_json, estructura_desde_snapshot,
+                                 generar_diagrama_tda, punto_final_de_main)
 
     if formato not in FORMATOS:
-        err_console.print(f"[bold red]Error:[/bold red] formato «{formato}» desconocido: usá mermaid o ascii.")
+        err_console.print(f"[bold red]Error:[/bold red] formato «{formato}» desconocido: usá {', '.join(FORMATOS)}.")
         raise typer.Exit(code=2)
+    datos = None
     if entrada.suffix == ".json":
         try:
             datos = json.loads(entrada.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             err_console.print(f"[bold red]Error:[/bold red] {entrada} no es un JSON válido ({exc}).")
             raise typer.Exit(code=2) from exc
-        diagrama = generar_diagrama(snapshot_desde_dict(datos, entrada.name), formato)
     else:
         _validar_fuente_c(entrada)
+    if tda:
+        from bishop.core.tracer import capturar_snapshot_gdb
+
+        try:
+            if datos is None:
+                snap = capturar_snapshot_gdb(entrada, punto_corte=punto_corte or punto_final_de_main(entrada))
+                estructura = estructura_desde_snapshot(snap, raiz)
+            elif isinstance(datos, dict) and any(k in datos for k in ("frames", "stack", "heap")):
+                estructura = estructura_desde_snapshot(snapshot_desde_dict(datos, entrada.name), raiz)
+            else:
+                estructura = estructura_desde_json(datos, tda)
+            diagrama = generar_diagrama_tda(estructura, tda, formato)
+        except ErrorDeTDA as exc:
+            err_console.print(f"[bold red]Error:[/bold red] {exc}")
+            raise typer.Exit(code=2) from exc
+    elif datos is not None:
+        diagrama = generar_diagrama(snapshot_desde_dict(datos, entrada.name), formato)
+    else:
         diagrama = diagrama_de_fuente(entrada, formato, punto_corte)
     if salida:
         salida.parent.mkdir(parents=True, exist_ok=True)

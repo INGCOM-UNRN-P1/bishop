@@ -74,6 +74,7 @@ Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del
 | Argumento | Tipo | Descripción |
 | :--- | :--- | :--- |
 | `fuente` | `Path` | Archivo C a trazar e inspeccionar. |
+| `argumentos` | `List[str]` | Argumentos para el programa (con `--html`). |
 
 #### Opciones y Banderas
 | Opción / Banderas | Tipo | Por Defecto | Descripción |
@@ -85,6 +86,8 @@ Ejecuta el programa, pausa en el punto indicado e inspecciona el estado vivo del
 | `--html` | `Optional[Path]` | `None` | Ejecutar línea por línea y guardar una página HTML navegable con el código, la pila y la salida en cada paso. |
 | `--input`, `-i` | `Optional[Path]` | `None` | Archivo para la entrada estándar del programa (con `--html`). |
 | `--max-steps` | `int` | `300` | Máximo de pasos de la traza (con `--html`). |
+| `--hasta-falla` | `bool` | `False` | Con `--html`: guardar los últimos `--max-steps` pasos antes de la falla y abrir la página en ella. |
+| `--limite-pila` | `Optional[int]` | `None` | Con `--html`: pila del programa en KiB (sólo Linux; con una recursión infinita, 64 llega rápido al Stack Overflow). |
 
 Con `--html`, en lugar de una foto en el punto de corte, bishop ejecuta el programa **paso a paso**
 con la API Python de gdb (desde `main`, o desde `--break`): entra a las funciones del estudiante, saltea
@@ -93,14 +96,62 @@ con sus variables (cada local aparece recién después de declararse; los punter
 la salida que lleva el programa. La página es un solo archivo, sin conexión: código con la próxima línea
 marcada y la anterior en verde, variables que cambiaron resaltadas, salida acumulada, y navegación con
 botones, deslizador o las flechas del teclado. Si el programa recibe una señal (un `SIGSEGV`), el
-último paso la muestra en la línea donde ocurrió. `--json` además imprime la traza. Sale con 2 si falta
+último paso la muestra en la línea donde ocurrió, y la página abre directamente en ese paso
+(`#paso-N` al final de la dirección abre otro). `--json` además imprime la traza. Sale con 2 si falta
 gdb o el programa no compila.
+
+**Hasta la falla** (`--hasta-falla`, lo que propone `hal` en cada crash): la traza guarda los
+**últimos** `--max-steps` pasos antes de la señal en vez de los primeros, así un `SIGSEGV` después de un
+bucle largo se ve igual. Una primera pasada cuenta los pasos sin leer la pila y una segunda ejecución,
+idéntica, guarda la ventana final; la página numera los pasos desde el principio de la ejecución y avisa
+cuántos se omitieron. Si el programa no falla, quedan los primeros. Con una recursión infinita conviene
+`--limite-pila 64`: el programa llega al Stack Overflow en unos miles de pasos en vez de cientos de
+miles (bishop baja el límite de pila del proceso ya detenido en `main`).
 
 #### Ejemplo de Invocación
 ```bash
 bishop trace <fuente>
 bishop trace lista.c --html traza.html
 bishop trace promedio.c --html traza.html --input casos/entrada.txt --max-steps 500
+bishop trace tp.c --hasta-falla --html falla.html
+bishop trace recursion.c --hasta-falla --limite-pila 64 --html falla.html
+```
+
+### `bishop diagram`
+
+Diagrama de memoria (Stack y Heap) en Mermaid, ASCII o Typst, para enunciados, lecciones y exámenes.
+La entrada es un fuente C (se ejecuta y se dibuja la memoria real en `--break`) o una traza JSON.
+
+| Opción / Banderas | Tipo | Por Defecto | Descripción |
+| :--- | :--- | :--- | :--- |
+| `--formato`, `-f` | `str` | `mermaid` | `mermaid`, `ascii` o `typst`. |
+| `--break`, `-b` | `Optional[str]` | `None` | Con un fuente C: función o línea donde tomar la memoria. |
+| `--output`, `-o` | `Optional[Path]` | `None` | Guardar el diagrama en un archivo. |
+| `--tda` | `Optional[str]` | `None` | Dibujar la forma de un TDA recursivo: `arbol` o `lista` (en `mermaid` o `typst`). |
+| `--raiz` | `Optional[str]` | `None` | Con `--tda` y un fuente C: la variable que apunta al TDA. |
+
+**TDAs recursivos** (`--tda`): en vez de las cajas de pila y heap, la forma del TDA. Un árbol se dibuja
+con la raíz arriba y cada hijo en su lado (en un árbol binario, el orden es el inorden, así el hijo
+izquierdo queda a la izquierda aunque falte el derecho; en uno n-ario, cada padre centrado sobre sus
+hijos); una lista, como cadena de nodos con sus flechas (`sig`, también `ant` si es doble, la vuelta al
+primero si es circular, `NULL` al final). Con un fuente C, los nodos son los bloques del heap del mismo
+tipo enlazados entre sí (una cabecera `Lista` con `cabeza` se atraviesa), desde la variable `--raiz` o la
+que apunta al nodo al que no llega ningún otro; sin `--break`, la memoria se toma en la llave que cierra
+`main`. Para un examen sin programa, el TDA se escribe en JSON:
+
+```json
+{"nombre": "raiz", "raiz": {"dato": 8, "izq": {"dato": 3, "izq": 1, "der": 6}, "der": {"dato": 10}}}
+{"nombre": "l", "valores": [3, 7, 12], "doble": true, "circular": false}
+```
+
+(las claves con un objeto, `null` o los nombres `izq`/`der` son hijos, `hijos: [...]` para un árbol
+n-ario; las demás, el contenido del nodo; una lista también puede ser `[3, 7, 12]`). El Typst usa sólo
+primitivas, sin paquetes, y se embebe con `#include "arbol.typ"`.
+
+```bash
+bishop diagram arbol.c --tda arbol --formato typst -o arbol.typ
+bishop diagram lista.c --tda lista --raiz cabeza --formato mermaid
+bishop diagram examen/arbol.json --tda arbol --formato typst -o arbol.typ
 ```
 
 ### `bishop snapshot`
