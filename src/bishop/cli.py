@@ -148,6 +148,36 @@ def diagram_cmd(
         print(diagrama)
 
 
+@app.command("layout")
+def layout_cmd(
+    archivo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Archivo .c o .h con el struct."),
+    struct: Optional[str] = typer.Option(None, "--struct", "-s", help="Nombre del struct (obligatorio si el archivo define varios)."),
+    formato: str = typer.Option("mermaid", "--formato", "-f", help="mermaid, typst (para el apunte o un examen) o ascii."),
+    por_fila: int = typer.Option(8, "--por-fila", min=1, max=32, help="Bytes por fila del diagrama."),
+    salida: Optional[Path] = typer.Option(None, "--output", "-o", help="Archivo donde escribir el diagrama."),
+) -> None:
+    """Diagrama del layout de un struct, byte por byte, con el relleno de alineación en gris.
+
+    Los offsets y el relleno los calcula brett (el motor de layout del ecosistema).
+    """
+    from bishop.core.layout_struct import FORMATOS_LAYOUT, StructNoEncontrado, generar_layout, layout_de
+
+    if formato not in FORMATOS_LAYOUT:
+        err_console.print(f"[bold red]Error:[/bold red] formato «{formato}» desconocido: usá {', '.join(FORMATOS_LAYOUT)}.")
+        raise typer.Exit(code=2)
+    try:
+        diagrama = generar_layout(layout_de(archivo, struct, por_fila), formato)
+    except StructNoEncontrado as exc:
+        err_console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+    if salida:
+        salida.parent.mkdir(parents=True, exist_ok=True)
+        salida.write_text(diagrama, encoding="utf-8")
+        console.print(f"[green]✓ Layout ({formato}) en:[/green] [cyan]{salida}[/cyan]")
+    else:
+        print(diagrama, end="")
+
+
 @app.command("trace")
 def trace_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a trazar e inspeccionar."),
