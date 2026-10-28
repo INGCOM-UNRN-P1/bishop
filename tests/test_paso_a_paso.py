@@ -180,7 +180,12 @@ def test_hasta_falla_guarda_los_ultimos_pasos(tmp_path):
     assert traza.senal == "SIGSEGV" and len(traza.pasos) == 10 and not traza.truncado
     assert traza.pasos[-1]["linea"] == 11 and traza.pasos[-1]["senal"] == "SIGSEGV"
     assert traza.omitidos > 300 and traza.to_dict()["omitidos"] == traza.omitidos
-    assert traza.salida == "19900 hola mundo\n"
+    # En Windows no hay stdbuf: al morir el proceso por SIGSEGV sin exit(), la CRT no vuelca
+    # el búfer de stdout al archivo, por lo que la salida queda vacía.
+    if os.name != "nt":
+        assert traza.salida == "19900 hola mundo\n"
+    else:
+        assert traza.salida in ("", "19900 hola mundo\n")
     # Sin --hasta-falla, los mismos 10 pasos son los primeros.
     primeros = trazar_paso_a_paso(fuente, max_pasos=10)
     assert primeros.truncado and primeros.omitidos == 0 and primeros.pasos[0]["linea"] == 5
@@ -217,7 +222,8 @@ def test_cli_hasta_falla(tmp_path):
     pagina = tmp_path / "falla.html"
     res = runner.invoke(app, ["trace", str(fuente), "x", "--html", str(pagina), "--hasta-falla", "--max-steps", "8"])
     assert res.exit_code == 0, res.output
-    assert "SIGSEGV" in res.output and "abre en ese paso" in res.output
+    salida = " ".join(res.output.split())
+    assert "SIGSEGV" in salida and "abre en ese paso" in salida
     datos = json.loads(re.search(r'id="datos">(.*?)</script>', pagina.read_text(encoding="utf-8"), re.S)
                        .group(1).replace("<\\/", "</"))
     assert len(datos["pasos"]) == 8 and datos["omitidos"] > 0 and datos["pasos"][-1]["linea"] == 11
