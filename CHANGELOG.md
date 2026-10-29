@@ -4,6 +4,16 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/);
 versiones según [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Agregado
+
+- `bishop layout --abi`: el layout con los tamaños de los tipos de otra plataforma (`x86_64-windows` para MSYS2, `i386`…), con la misma tabla de brett que usa kane (Ola 28).
+
+### Cambiado
+
+- brett fijado en `044dfa4` (publicado, con `ABIS`).
+
 ## [0.2.0] - 2026-09-28
 
 Primera versión con registro de cambios; lo anterior está en el historial de git.

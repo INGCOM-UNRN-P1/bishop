@@ -69,3 +69,16 @@ def test_ascii_y_cli(archivo):
     res = runner.invoke(app, ["layout", str(archivo), "-s", "alumno_t", "-f", "typst"])
     assert res.exit_code == 0 and "luma(225)" in res.stdout
     assert runner.invoke(app, ["layout", str(archivo), "-f", "svg"]).exit_code == 2
+
+
+def test_abi_cambia_los_offsets(archivo):
+    """Ola 28: la misma tabla por ABI que kane (brett.core.layout.ABIS)."""
+    # i386: double alineado a 4 y long de 4 → 1 + 3 + 8 + 4 + 1 + 3 + 4 = 24.
+    i386 = layout_de(archivo, "alumno_t", abi="i386")
+    assert (i386.tamanio_total, i386.datos_utiles) == (24, 18)
+    # MSYS2 (LLP64): long de 4 → 1 + 7 + 8 + 4 + 1 + 3 + 4 = 28, más 4 de relleno final (alineación 8) = 32.
+    windows = layout_de(archivo, "alumno_t", abi="x86_64-windows")
+    assert (windows.tamanio_total, windows.datos_utiles) == (32, 18)
+    res = runner.invoke(app, ["layout", str(archivo), "--struct", "alumno_t", "--abi", "sparc"])
+    assert res.exit_code == 2
+    assert runner.invoke(app, ["layout", str(archivo), "--struct", "alumno_t", "--abi", "i386", "-f", "ascii"]).exit_code == 0

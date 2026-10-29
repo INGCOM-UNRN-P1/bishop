@@ -40,12 +40,13 @@ class Layout:
     por_fila: int
 
 
-def layout_de(archivo: Path, nombre: Optional[str] = None, por_fila: int = 8) -> Layout:
-    """El layout del struct `nombre` del archivo (o del único que defina), partido en filas."""
+def layout_de(archivo: Path, nombre: Optional[str] = None, por_fila: int = 8, abi: str = "x86_64") -> Layout:
+    """El layout del struct `nombre` del archivo (o del único que defina), partido en filas, con los
+    tamaños de los tipos en esa ABI (la tabla de brett, la misma que usa kane)."""
     from brett.core.layout import disponer
     from brett.core.padding import analizar_archivo_c
 
-    structs = analizar_archivo_c(Path(archivo))
+    structs = analizar_archivo_c(Path(archivo), abi=abi)
     if nombre:
         elegidos = [s for s in structs if s.nombre == nombre]
     else:

@@ -35,7 +35,7 @@ dependencies = [
     # Núcleo común del ecosistema (N-ECO-14): contrato de línea de comandos y textos en español.
     "yutani @ git+https://github.com/INGCOM-UNRN-P1/yutani@cf49348fae40d264006fe07dee2cc9e88dd9c934",
     # brett es el dueño del layout de structs: `bishop layout` dibuja sus offsets y su relleno (Ola 18).
-    "brett @ git+https://github.com/INGCOM-UNRN-P1/brett@2e15287621eb9ff96821d431dddc30bfb5dd42a4",
+    "brett @ git+https://github.com/INGCOM-UNRN-P1/brett@044dfa4526760e14cc3941c5b7a0de1aacd960d3",
 ]
 
 [project.optional-dependencies]

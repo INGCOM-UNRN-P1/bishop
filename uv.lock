@@ -35,7 +35,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "brett", git = "https://github.com/INGCOM-UNRN-P1/brett?rev=2e15287621eb9ff96821d431dddc30bfb5dd42a4" },
+    { name = "brett", git = "https://github.com/INGCOM-UNRN-P1/brett?rev=044dfa4526760e14cc3941c5b7a0de1aacd960d3" },
     { name = "daedalus", marker = "extra == 'ecosistema'", git = "https://github.com/INGCOM-UNRN-P1/daedalus?rev=0d3da518270cea8d6a0dff85d8cec61de2e89fff" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
@@ -50,7 +50,7 @@ dev = [{ name = "pytest", specifier = ">=7.4.0" }]
 [[package]]
 name = "brett"
 version = "0.2.0"
-source = { git = "https://github.com/INGCOM-UNRN-P1/brett?rev=2e15287621eb9ff96821d431dddc30bfb5dd42a4#2e15287621eb9ff96821d431dddc30bfb5dd42a4" }
+source = { git = "https://github.com/INGCOM-UNRN-P1/brett?rev=044dfa4526760e14cc3941c5b7a0de1aacd960d3#044dfa4526760e14cc3941c5b7a0de1aacd960d3" }
 dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
