@@ -2,6 +2,7 @@
 (`bishop gdb-script`), sigue el heap sin detener el programa y saca la foto de cada parada."""
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -43,6 +44,8 @@ def fotos(tmp_path_factory):
          "-ex", f"bishop-memoria {tmp / 'primera.json'}", "-ex", f"break {FUENTE.name}:26", "-ex", "continue",
          "-ex", f"bishop-memoria {tmp / 'segunda.json'}", str(binario)],
         capture_output=True, text=True, timeout=60, cwd=tmp,
+        # Con la configuración regional C (la de jonesy), gdb no acepta tildes en la ayuda.
+        env={**os.environ, "LC_ALL": "C"},
     )
     return [json.loads((tmp / f"{n}.json").read_text(encoding="utf-8")) for n in ("primera", "segunda")]
 

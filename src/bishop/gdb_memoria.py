@@ -421,8 +421,10 @@ def tomar_memoria(programa, seguimiento=None, max_bloques=MAX_BLOQUES, max_eleme
 SEGUIMIENTO = None
 
 
+# La ayuda de los comandos y sus errores van en ASCII: gdb los pasa al juego de caracteres de la
+# terminal, y con LC_ALL=C (jonesy lo usa) una tilde hace fallar la carga del módulo entero.
 class _Seguir(gdb.Command):
-    """bishop-seguir [RAIZ]: sigue malloc, calloc, realloc y free del código bajo RAIZ."""
+    """bishop-seguir [RAIZ]: sigue malloc, calloc, realloc y free del programa bajo RAIZ."""
 
     def __init__(self):
         super().__init__("bishop-seguir", gdb.COMMAND_DATA)
@@ -451,7 +453,7 @@ class _Memoria(gdb.Command):
         try:
             gdb.newest_frame()
         except gdb.error:
-            raise gdb.GdbError("el programa no está corriendo") from None
+            raise gdb.GdbError("no hay un programa detenido") from None
         programa = SEGUIMIENTO.programa if SEGUIMIENTO is not None else Programa(raiz=os.getcwd())
         datos = tomar_memoria(programa, SEGUIMIENTO)
         with open(args[0], "w", encoding="utf-8") as salida:
