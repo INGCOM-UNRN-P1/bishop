@@ -518,6 +518,14 @@ def diff_cmd(
     ))
 
 
+@app.command("gdb-script")
+def gdb_script_cmd() -> None:
+    """Ruta del módulo de gdb que sigue el heap y saca la memoria de cada parada, para depuradores en vivo."""
+    # Se carga con `source <ruta>` en la sesión de gdb del depurador (jonesy lo hace en el paso a
+    # paso) y define `bishop-seguir [RAIZ]` y `bishop-memoria ARCHIVO`; ver bishop/gdb_memoria.py.
+    typer.echo(str(Path(__file__).parent / "gdb_memoria.py"))
+
+
 @app.command("doctor")
 def doctor_cmd(
     json_output: bool = typer.Option(False, "--json", help="Emitir diagnóstico en formato JSON estructurado."),

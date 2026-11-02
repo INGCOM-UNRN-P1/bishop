@@ -64,6 +64,7 @@ bishop doctor
 | [`bishop ascii`](#ascii) | Muestra punteros y marcos de Stack con flechas direccionales ASCII en terminal. |
 | [`bishop audit`](#audit) | Audita punteros colgantes (en rojo), fugas/huérfanos (en amarillo) y solapamiento de buffers. |
 | [`bishop diff`](#diff) | Compara snapshots de memoria antes y después de una invocación de función. |
+| [`bishop gdb-script`](#gdb-script) | Ruta del módulo de gdb que sigue el heap y saca la memoria de cada parada, para depuradores en vivo. |
 | [`bishop doctor`](#doctor) | Verifica el estado del entorno de inspección dinámica de memoria BISHOP (Python, GCC, GDB). |
 
 ### `bishop trace`
@@ -314,6 +315,35 @@ Compara snapshots de memoria antes y después de una invocación de función.
 #### Ejemplo de Invocación
 ```bash
 bishop diff <fuente>
+```
+
+### `bishop gdb-script`
+
+Imprime la ruta de `gdb_memoria.py`, el módulo que corre adentro de gdb con su API Python. Un
+depurador lo carga en su propia sesión para mostrar la memoria en cada paso, sin volver a correr
+el programa. jonesy lo hace con F5 y lo dibuja en la vista de memoria (Alt+M). Es el mismo código
+que usan `snapshot`, `heap` y `diagram`. Define dos comandos de gdb:
+
+| Comando de gdb | Qué hace |
+| :--- | :--- |
+| `bishop-seguir [RAIZ]` | Sigue `malloc`, `calloc`, `realloc` y `free` sin detener el programa. Cada reserva hecha desde el código bajo RAIZ (por defecto, el directorio actual) recibe un número (#1, #2…), su tamaño pedido y la línea que la pidió. Cada `free` anota la suya. Las reservas internas de la biblioteca (el búfer de `printf`) no cuentan; las de `strdup`, sí. |
+| `bishop-memoria ARCHIVO` | Escribe en ARCHIVO, en JSON, la memoria de la parada actual. |
+
+El JSON de `bishop-memoria` trae:
+
+- **Marcos del programa**: cada uno con sus variables, con dirección, tipo y valor reales.
+- **Bloques del heap**: los que se alcanzan siguiendo punteros. Cada bloque trae `id`, `sitio`, `campos` (si es un struct) y `punteros_salientes`.
+- **Bloques vivos sin referencias**: llevan `"alcanzable": false`. Son fugas, porque ya no se pueden liberar.
+- **Eventos**: `eventos` lista los `malloc`, `free` y `realloc` desde la foto anterior. Marca un `free` doble, un `free` de algo que no vino de `malloc` y un `malloc` que devolvió `NULL`.
+
+#### Ejemplo de Invocación
+```gdb
+(gdb) source /ruta/que/imprime/bishop/gdb-script
+(gdb) bishop-seguir /home/alumno/tp1
+(gdb) break main
+(gdb) run
+(gdb) next
+(gdb) bishop-memoria /tmp/memoria.json
 ```
 
 ### `bishop doctor`
