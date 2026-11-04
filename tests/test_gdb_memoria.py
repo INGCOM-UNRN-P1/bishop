@@ -35,10 +35,11 @@ def fotos(tmp_path_factory):
     if not _gdb_con_python():
         pytest.skip("requiere gcc y gdb con Python")
     tmp = tmp_path_factory.mktemp("vivo")
-    binario = tmp / "programa"
+    # gcc agrega la extensión en Windows: nombrarla evita depender de que gdb la adivine.
+    binario = tmp / ("programa.exe" if os.name == "nt" else "programa")
     subprocess.run(["gcc", "-g", "-O0", "-o", str(binario), str(FUENTE)], check=True)
     pasos = ["-ex", "next"] * 6
-    subprocess.run(
+    res = subprocess.run(
         ["gdb", "-nx", "-batch", "-ex", "set debuginfod enabled off", "-ex", f"source {MODULO}",
          "-ex", f"bishop-seguir {FUENTE.parent}", "-ex", "break main", "-ex", "run", *pasos,
          "-ex", f"bishop-memoria {tmp / 'primera.json'}", "-ex", f"break {FUENTE.name}:26", "-ex", "continue",
@@ -47,7 +48,38 @@ def fotos(tmp_path_factory):
         # Con la configuración regional C (la de jonesy), gdb no acepta tildes en la ayuda.
         env={**os.environ, "LC_ALL": "C"},
     )
+    faltan = [n for n in ("primera", "segunda") if not (tmp / f"{n}.json").is_file()]
+    assert not faltan, f"gdb no escribió {faltan}:\n{res.stdout}\n{res.stderr}"
     return [json.loads((tmp / f"{n}.json").read_text(encoding="utf-8")) for n in ("primera", "segunda")]
+
+
+def test_una_ruta_con_barras_invertidas_llega_entera(tmp_path):
+    # En Linux la barra invertida es parte del nombre: alcanza para ver que nadie la interpreta.
+    if not _gdb_con_python():
+        pytest.skip("requiere gcc y gdb con Python")
+    binario = tmp_path / "programa"
+    subprocess.run(["gcc", "-g", "-O0", "-o", str(binario), str(FUENTE)], check=True)
+    nombre = "fotos\\de\\memoria.json"
+    subprocess.run(
+        ["gdb", "-nx", "-batch", "-ex", "set debuginfod enabled off", "-ex", f"source {MODULO}",
+         "-ex", "break main", "-ex", "run", "-ex", f"bishop-memoria {nombre}", str(binario)],
+        capture_output=True, text=True, timeout=60, cwd=tmp_path, env={**os.environ, "LC_ALL": "C"},
+    )
+    assert (tmp_path / nombre).is_file()
+
+
+def test_una_ruta_entre_comillas_sigue_valiendo(tmp_path):
+    # Es la forma de jonesy y construct: entre comillas y con las barras ya escapadas.
+    if not _gdb_con_python():
+        pytest.skip("requiere gcc y gdb con Python")
+    binario = tmp_path / "programa"
+    subprocess.run(["gcc", "-g", "-O0", "-o", str(binario), str(FUENTE)], check=True)
+    subprocess.run(
+        ["gdb", "-nx", "-batch", "-ex", "set debuginfod enabled off", "-ex", f"source {MODULO}",
+         "-ex", "break main", "-ex", "run", "-ex", 'bishop-memoria "con espacio\\\\foto.json"', str(binario)],
+        capture_output=True, text=True, timeout=60, cwd=tmp_path, env={**os.environ, "LC_ALL": "C"},
+    )
+    assert (tmp_path / "con espacio\\foto.json").is_file()
 
 
 def test_cada_reserva_con_numero_y_linea(fotos):

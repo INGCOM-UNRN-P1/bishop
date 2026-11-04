@@ -423,6 +423,18 @@ SEGUIMIENTO = None
 
 # La ayuda de los comandos y sus errores van en ASCII: gdb los pasa al juego de caracteres de la
 # terminal, y con LC_ALL=C (jonesy lo usa) una tilde hace fallar la carga del módulo entero.
+def _argumentos_de_ruta(argumento):
+    """Los argumentos de un comando que recibe una ruta.
+
+    `gdb.string_to_argv` trata la barra invertida como escape: una ruta de Windows sin comillas
+    (`C:\\Temp\\foto.json`) perdería las barras. Entre comillas, quien llama ya la escapó.
+    """
+    texto = argumento.strip()
+    if texto and not any(c in texto for c in "\"'"):
+        return [texto]
+    return gdb.string_to_argv(argumento)
+
+
 class _Seguir(gdb.Command):
     """bishop-seguir [RAIZ]: sigue malloc, calloc, realloc y free del programa bajo RAIZ."""
 
@@ -431,7 +443,7 @@ class _Seguir(gdb.Command):
 
     def invoke(self, argumento, from_tty):
         global SEGUIMIENTO
-        args = gdb.string_to_argv(argumento)
+        args = _argumentos_de_ruta(argumento)
         raiz = args[0] if args else os.getcwd()
         if SEGUIMIENTO is not None:
             for bp in SEGUIMIENTO.breakpoints:
@@ -447,7 +459,7 @@ class _Memoria(gdb.Command):
         super().__init__("bishop-memoria", gdb.COMMAND_DATA)
 
     def invoke(self, argumento, from_tty):
-        args = gdb.string_to_argv(argumento)
+        args = _argumentos_de_ruta(argumento)
         if len(args) != 1:
             raise gdb.GdbError("uso: bishop-memoria ARCHIVO")
         try:
