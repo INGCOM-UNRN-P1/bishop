@@ -57,9 +57,10 @@ def test_una_ruta_con_barras_invertidas_llega_entera(tmp_path):
     # En Linux la barra invertida es parte del nombre: alcanza para ver que nadie la interpreta.
     if not _gdb_con_python():
         pytest.skip("requiere gcc y gdb con Python")
-    binario = tmp_path / "programa"
+    binario = tmp_path / ("programa.exe" if os.name == "nt" else "programa")
     subprocess.run(["gcc", "-g", "-O0", "-o", str(binario), str(FUENTE)], check=True)
     nombre = "fotos\\de\\memoria.json"
+    (tmp_path / "fotos" / "de").mkdir(parents=True)  # en Windows son carpetas
     subprocess.run(
         ["gdb", "-nx", "-batch", "-ex", "set debuginfod enabled off", "-ex", f"source {MODULO}",
          "-ex", "break main", "-ex", "run", "-ex", f"bishop-memoria {nombre}", str(binario)],
@@ -72,8 +73,9 @@ def test_una_ruta_entre_comillas_sigue_valiendo(tmp_path):
     # Es la forma de jonesy y construct: entre comillas y con las barras ya escapadas.
     if not _gdb_con_python():
         pytest.skip("requiere gcc y gdb con Python")
-    binario = tmp_path / "programa"
+    binario = tmp_path / ("programa.exe" if os.name == "nt" else "programa")
     subprocess.run(["gcc", "-g", "-O0", "-o", str(binario), str(FUENTE)], check=True)
+    (tmp_path / "con espacio").mkdir()  # en Windows es una carpeta
     subprocess.run(
         ["gdb", "-nx", "-batch", "-ex", "set debuginfod enabled off", "-ex", f"source {MODULO}",
          "-ex", "break main", "-ex", "run", "-ex", 'bishop-memoria "con espacio\\\\foto.json"', str(binario)],
