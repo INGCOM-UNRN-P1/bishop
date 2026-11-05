@@ -217,13 +217,15 @@ class Seguimiento:
 
 
 def _rangos_heap():
+    """El heap según /proc, que el núcleo escribe siempre igual. En Windows no existe: ver `es_heap`."""
     rangos = []
     try:
-        for linea in gdb.execute("info proc mappings", to_string=True).splitlines():
-            if "[heap]" in linea:
-                partes = linea.split()
-                rangos.append((int(partes[0], 16), int(partes[1], 16)))
-    except gdb.error:
+        with open("/proc/%d/maps" % gdb.selected_inferior().pid, encoding="utf-8", errors="replace") as mapa:
+            for linea in mapa:
+                if linea.rstrip().endswith("[heap]"):
+                    desde, hasta = linea.split()[0].split("-")
+                    rangos.append((int(desde, 16), int(hasta, 16)))
+    except OSError:
         pass
     return rangos
 
