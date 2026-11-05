@@ -103,6 +103,9 @@ class SnapshotMemoria:
     heap: List[BloqueHeap] = field(default_factory=list)
     total_bytes_heap_activos: int = 0
     fugas_detectadas: int = 0
+    # "gdb": la memoria real. "estatico": no se pudo ejecutar, y `motivo` dice por qué.
+    origen: str = "gdb"
+    motivo: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         frames_list = [f.to_dict() for f in self.frames]
@@ -113,6 +116,8 @@ class SnapshotMemoria:
             "file": str(self.archivo),
             "linea": self.linea,
             "line": self.linea,
+            "origen": self.origen,
+            "motivo": self.motivo,
             "total_frames": len(self.frames),
             "total_bloques_heap": len(self.heap),
             "total_bytes_heap_activos": self.total_bytes_heap_activos,

@@ -43,6 +43,10 @@ Para instalar la herramienta de forma global y aislada en el sistema mediante `u
 uv tool install "bishop[ecosistema] @ git+https://github.com/INGCOM-UNRN-P1/bishop"
 ```
 
+### De dónde sale la memoria
+
+Todos los comandos leen la memoria con la API Python de gdb (`src/bishop/gdb_memoria.py`), el mismo módulo que carga jonesy. Si no se puede ejecutar el programa (no compila, falta gdb, gdb no tiene Python o el programa termina antes del punto de corte), bishop arma un dibujo a partir del fuente, con direcciones ilustrativas, y avisa que no es la memoria real. En `--json`, `origen` vale `gdb` o `estatico` y `motivo` dice por qué.
+
 ### Verificación de Instalación
 Ejecutá el comando `doctor` para constatar que todas las dependencias y binarios requeridos estén presentes y operativos:
 ```bash

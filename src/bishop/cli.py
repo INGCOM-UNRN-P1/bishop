@@ -21,6 +21,15 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+def _snapshot(fuente: Path, **opciones: object) -> SnapshotMemoria:
+    """El snapshot, avisando si no es memoria real (ver `tracer._generar_snapshot_estatico`)."""
+    snap = capturar_snapshot_gdb(fuente, **opciones)  # type: ignore[arg-type]
+    if snap.origen != "gdb":
+        err_console.print(f"[yellow]⚠ Esto no es la memoria real:[/yellow] {snap.motivo} "
+                          "Lo que sigue se armó leyendo el fuente, con direcciones ilustrativas.")
+    return snap
+
+
 def _validar_fuente_c(fuente: Path) -> None:
     """Valida que el archivo exista y sea código fuente C legible, no un ejecutable o binario."""
     if not fuente.is_file():
@@ -122,11 +131,9 @@ def diagram_cmd(
     else:
         _validar_fuente_c(entrada)
     if tda:
-        from bishop.core.tracer import capturar_snapshot_gdb
-
         try:
             if datos is None:
-                snap = capturar_snapshot_gdb(entrada, punto_corte=punto_corte or punto_final_de_main(entrada))
+                snap = _snapshot(entrada, punto_corte=punto_corte or punto_final_de_main(entrada))
                 estructura = estructura_desde_snapshot(snap, raiz)
             elif isinstance(datos, dict) and any(k in datos for k in ("frames", "stack", "heap")):
                 estructura = estructura_desde_snapshot(snapshot_desde_dict(datos, entrada.name), raiz)
@@ -228,7 +235,7 @@ def trace_cmd(
                       f"[dim](el programa {final}; abrila en el navegador)[/dim]")
         raise typer.Exit(code=0)
 
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
 
     if output_md:
         md_text = generar_seccion_markdown(snap)
@@ -257,7 +264,7 @@ def snapshot_cmd(
     """Toma una foto exacta del estado del Stack y Heap en una línea específica de código."""
     _validar_fuente_c(fuente)
 
-    snap = capturar_snapshot_gdb(fuente, linea_corte=linea)
+    snap = _snapshot(fuente, linea_corte=linea)
 
     if json_output:
         print(json.dumps(snap.to_dict(), indent=2, ensure_ascii=False))
@@ -275,7 +282,7 @@ def heap_cmd(
     """Audita exclusivamente el estado del Heap, bloques activos y detección de punteros huérfanos."""
     _validar_fuente_c(fuente)
 
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
 
     if json_output:
         print(json.dumps([b.to_dict() for b in snap.heap], indent=2, ensure_ascii=False))
@@ -308,7 +315,7 @@ def report_cmd(
     """Genera directamente la sección de reporte Markdown de BISHOP para Dredd o JSON estructurado."""
     _validar_fuente_c(fuente)
 
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
 
     if json_output:
         payload = {
@@ -338,7 +345,7 @@ def beginner_cmd(
     """Modo visualización simplificada para principiantes en español rioplatense."""
     from bishop.core.ascii_visualizer import render_modo_principiante
     _validar_fuente_c(fuente)
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
 
     if json_output:
         payload = {
@@ -387,7 +394,7 @@ def heap_map_cmd(
     from bishop.core.ascii_visualizer import render_heap_fragmentation_map
     from bishop.core.memory_analyzer import analizar_fragmentacion_heap
     _validar_fuente_c(fuente)
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
 
     if json_output:
         frag = analizar_fragmentacion_heap(snap)
@@ -412,7 +419,7 @@ def ascii_cmd(
     """Muestra punteros y marcos de Stack con flechas direccionales ASCII en terminal."""
     from bishop.core.ascii_visualizer import render_ascii_punteros
     _validar_fuente_c(fuente)
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
 
     if json_output:
         print(json.dumps(snap.to_dict(), indent=2, ensure_ascii=False))
@@ -436,7 +443,7 @@ def audit_cmd(
     )
     _validar_fuente_c(fuente)
 
-    snap = capturar_snapshot_gdb(fuente, punto_corte=punto_corte)
+    snap = _snapshot(fuente, punto_corte=punto_corte)
     dangling = auditar_punteros_colgantes(snap)
     huerfanos = detectar_fugas_y_huerfanos(snap)
     multiples = detectar_punteros_multiples(snap)
@@ -487,8 +494,8 @@ def diff_cmd(
     from bishop.core.memory_analyzer import comparar_snapshots
     _validar_fuente_c(fuente)
 
-    snap_antes = capturar_snapshot_gdb(fuente, linea_corte=linea_antes)
-    snap_despues = capturar_snapshot_gdb(fuente, linea_corte=linea_despues)
+    snap_antes = _snapshot(fuente, linea_corte=linea_antes)
+    snap_despues = _snapshot(fuente, linea_corte=linea_despues)
     diff = comparar_snapshots(snap_antes, snap_despues)
 
     if json_output:
@@ -558,8 +565,12 @@ def doctor_cmd(
         try:
             res = subprocess.run([gdb_path, "--version"], capture_output=True, text=True, timeout=5)
             first_line = res.stdout.splitlines()[0] if res.stdout else "GDB operativo"
-            gdb_ok = True
-            gdb_det = f"{gdb_path} ({first_line})"
+            # La memoria se lee con la API Python de gdb: sin ella sólo queda el dibujo del fuente.
+            con_python = subprocess.run([gdb_path, "-nx", "-batch", "-ex", "python print('bishop-ok')"],
+                                        capture_output=True, text=True, timeout=10)
+            gdb_ok = "bishop-ok" in con_python.stdout
+            gdb_det = (f"{gdb_path} ({first_line})" if gdb_ok else
+                       f"{gdb_path} no tiene soporte de Python: instalá un gdb que lo tenga para ver la memoria real")
         except Exception as e:
             gdb_det = str(e)
     else:

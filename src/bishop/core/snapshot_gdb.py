@@ -1,9 +1,6 @@
 """Snapshot de memoria con la API Python de gdb (revisión 07: `heap` y `ascii` sin parsear texto).
 
-`tracer.capturar_snapshot_gdb` leía la salida de `info locals` como texto: inventaba las
-direcciones de las variables, adivinaba los tipos y no veía nada dentro del heap, así que una
-lista doblemente enlazada o una matriz `int **` se dibujaban como un bloque suelto. Este script
-corre dentro de gdb (`gdb -batch -x`), se detiene en el punto de corte y:
+Es el único camino de `tracer.capturar_snapshot_gdb` a la memoria real. Este script corre dentro de gdb (`gdb -batch -x`), se detiene en el punto de corte y:
 
 - toma de cada marco del programa sus variables con la dirección, el tipo y el valor reales;
 - sigue los punteros hacia el heap y, en cada bloque, sus campos puntero (`sig`, `ant`, `izq`…) o
@@ -78,12 +75,13 @@ def capturar_con_python_gdb(fuente: Path, punto_corte: str, entrada: Optional[Pa
 
     gdb = shutil.which("gdb")
     if not gdb:
-        raise ErrorDeSnapshot("no se encontró gdb")
+        raise ErrorDeSnapshot("Falta gdb: instalalo para ver la memoria real (ver `bishop doctor`).")
     with tempfile.TemporaryDirectory(prefix="bishop-snapshot-") as tmp:
         directorio = Path(tmp)
         ok, binario, error = compilar_con_simbolos(fuente, directorio)
         if not ok or binario is None:
-            raise ErrorDeSnapshot(f"{fuente.name} no compila:\n{error.strip()}")
+            raise ErrorDeSnapshot(f"{fuente.name} todavía no compila: corregilo con `daedalus` para ver la memoria real.\n"
+                                 f"{error.strip()}")
         configuracion = {
             "fuentes": [os.path.realpath(fuente)],
             "punto": punto_corte,
@@ -97,13 +95,15 @@ def capturar_con_python_gdb(fuente: Path, punto_corte: str, entrada: Optional[Pa
         (directorio / "snapshot.py").write_text(script_gdb(), encoding="utf-8")
         entorno = {**os.environ, "BISHOP_SNAPSHOT_CONFIG": str(directorio / "config.json")}
         try:
-            res = subprocess.run([gdb, "-nx", "-batch", "-x", str(directorio / "snapshot.py"), str(binario)],
+            res = subprocess.run([gdb, "-nx", "-batch", "-iex", "set auto-load off", "-x", str(directorio / "snapshot.py"),
+                                  str(binario)],
                                  capture_output=True, text=True, timeout=timeout, env=entorno)
         except subprocess.TimeoutExpired:
-            raise ErrorDeSnapshot(f"gdb superó {timeout:g} s") from None
+            raise ErrorDeSnapshot(f"El programa no llegó al punto de corte en {timeout:g} s (¿lazo infinito?).") from None
         archivo = directorio / "snapshot.json"
         if not archivo.is_file():
-            raise ErrorDeSnapshot("gdb no pudo tomar el snapshot:\n" + (res.stderr or res.stdout).strip()[-1500:])
+            raise ErrorDeSnapshot("gdb no pudo leer la memoria: puede que no tenga soporte de Python "
+                                  "(ver `bishop doctor`).\n" + (res.stderr or res.stdout).strip()[-1500:])
         datos = json.loads(archivo.read_text(encoding="utf-8"))
     if datos.get("error"):
         raise ErrorDeSnapshot(datos["error"])
