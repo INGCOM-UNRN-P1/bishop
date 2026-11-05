@@ -1,6 +1,7 @@
 """Un único motor de memoria: la API Python de gdb (ola R3). Sin él, un dibujo que dice que lo es."""
 
 import json
+import os
 import shutil
 
 import pytest
@@ -8,6 +9,7 @@ from typer.testing import CliRunner
 
 from bishop.cli import app
 from bishop.core import snapshot_gdb
+from bishop.core.diagrama import MemoriaNoReal, diagrama_de_fuente
 from bishop.core.tracer import _generar_snapshot_estatico, capturar_snapshot_gdb
 
 con_gdb = pytest.mark.skipif(not (shutil.which("gcc") and shutil.which("gdb")), reason="hace falta gcc y gdb")
@@ -114,3 +116,92 @@ def test_doctor_comprueba_que_gdb_tenga_python():
     res = CliRunner().invoke(app, ["doctor", "--json"])
 
     assert json.loads(res.stdout)["ok"] is True
+
+
+NO_COMPILA = "int main(void) { int a = 1 return a; }\n"
+con_gcc = pytest.mark.skipif(shutil.which("gcc") is None, reason="hace falta gcc")
+
+
+@con_gcc
+def test_un_diagrama_no_sale_de_un_dibujo_del_fuente(tmp_path):
+    with pytest.raises(MemoriaNoReal, match="no compila"):
+        diagrama_de_fuente(_fuente(tmp_path, NO_COMPILA))
+
+
+@con_gcc
+@pytest.mark.parametrize("opciones", [[], ["--tda", "lista"]])
+def test_el_comando_diagrama_falla_sin_escribir_nada(tmp_path, opciones):
+    salida = tmp_path / "diagrama.mmd"
+
+    res = CliRunner().invoke(app, ["diagram", str(_fuente(tmp_path, NO_COMPILA)), "-o", str(salida), *opciones])
+
+    assert res.exit_code == 2 and "no compila" in res.output and not salida.exists()
+
+
+@con_gcc
+def test_ripley_no_audita_un_dibujo_del_fuente(tmp_path):
+    from bishop.ripley_plugin import BishopPlugin
+
+    _fuente(tmp_path, NO_COMPILA)
+
+    resultado = BishopPlugin().execute(tmp_path, {})
+
+    assert resultado["observaciones"] == []
+    assert "no compila" in resultado["sin_ejecutar"][0]["motivo"]
+
+
+@con_gcc
+def test_el_informe_para_dredd_no_da_cifras_de_un_dibujo(tmp_path):
+    from bishop.cli import generar_seccion_markdown
+
+    seccion = generar_seccion_markdown(capturar_snapshot_gdb(_fuente(tmp_path, NO_COMPILA)))
+
+    assert "Sin memoria real" in seccion and "Bloques activos" not in seccion
+
+
+@con_gdb
+@pytest.mark.skipif(not os.path.isdir("/proc/self"), reason="hace falta /proc")
+def test_el_heap_sale_del_mapa_de_proc(tmp_path, monkeypatch):
+    original = snapshot_gdb.script_gdb
+    monkeypatch.setattr(snapshot_gdb, "script_gdb",
+                        lambda: original().replace('CONFIG.get("seguir_reservas", True)', "False"))
+    codigo = ("#include <stdlib.h>\nstatic int global = 1;\nint main(void) {\n    int *b = &global;\n"
+              "    int *c = malloc(8);\n    *c = *b;\n    free(c);\n    return 0;\n}\n")
+
+    datos = snapshot_gdb.capturar_con_python_gdb(_fuente(tmp_path, codigo), "prog.c:7")
+
+    assert len(datos["heap"]) == 1  # c sí, y b, que apunta a datos estáticos, no
+
+
+def _sin_proc_ni_seguimiento(monkeypatch):
+    """Como en Windows: sin mapa de memoria, y sin que malloc esté registrado, el heap es lo que
+    reconoce el allocator (`malloc_usable_size` acá, `_msize` allá)."""
+    original = snapshot_gdb.script_gdb
+
+    def script():
+        return original().replace('CONFIG.get("seguir_reservas", True)', "False").replace(
+            "programa = Programa(", "_rangos_heap = lambda: []\nprograma = Programa(")
+
+    monkeypatch.setattr(snapshot_gdb, "script_gdb", script)
+
+
+@con_gdb
+def test_sin_proc_el_allocator_reconoce_los_bloques(tmp_path, monkeypatch):
+    _sin_proc_ni_seguimiento(monkeypatch)
+
+    datos = snapshot_gdb.capturar_con_python_gdb(_fuente(tmp_path, LISTA), "prog.c:7")
+
+    assert len(datos["heap"]) == 1 and datos["heap"][0]["tamanio_bytes"] >= 16
+
+
+@con_gdb
+@pytest.mark.skipif(os.name != "nt", reason="malloc_usable_size no valida el puntero: sólo `_msize` lo hace")
+def test_en_windows_un_puntero_a_la_pila_o_a_datos_no_es_heap(tmp_path, monkeypatch):
+    _sin_proc_ni_seguimiento(monkeypatch)
+    codigo = ("#include <stdlib.h>\nstatic int global = 1;\nint main(void) {\n    int local = 2;\n"
+              "    int *a = &local;\n    int *b = &global;\n    int *c = malloc(8);\n    *c = *a + *b;\n"
+              "    free(c);\n    return 0;\n}\n")
+
+    datos = snapshot_gdb.capturar_con_python_gdb(_fuente(tmp_path, codigo), "prog.c:9")
+
+    assert len(datos["heap"]) == 1

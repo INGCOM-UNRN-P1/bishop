@@ -13,6 +13,8 @@ def test_bishop_plugin_contract(tmp_path: Path, monkeypatch):
             (),
             {
                 "heap": [],
+                "origen": "gdb",
+                "motivo": "",
                 "to_dict": lambda self: {"archivo": str(archivo), "linea": 1},
             },
         )(),

@@ -22,6 +22,7 @@ class BishopPlugin:
         archivos = sorted(Path(workspace).rglob("*.c"))
         observaciones = []
         reportes = []
+        sin_ejecutar = []
         for archivo in archivos:
             snapshot = capturar_snapshot_gdb(
                 archivo,
@@ -29,6 +30,10 @@ class BishopPlugin:
             )
             reporte = snapshot.to_dict()
             reportes.append(reporte)
+            if snapshot.origen != "gdb":
+                # Un dibujo del fuente no dice nada del heap: no se audita, y queda constancia.
+                sin_ejecutar.append({"file": str(archivo), "motivo": snapshot.motivo})
+                continue
             for bloque in snapshot.heap:
                 if bloque.esta_liberado or bloque.punteros_referenciantes:
                     continue
@@ -45,4 +50,5 @@ class BishopPlugin:
             "ok": not observaciones,
             "observaciones": observaciones,
             "reportes": reportes,
+            "sin_ejecutar": sin_ejecutar,
         }

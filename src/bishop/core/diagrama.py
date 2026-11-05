@@ -93,7 +93,18 @@ def generar_diagrama(snap: SnapshotMemoria, formato: str = "mermaid") -> str:
     return generar_mermaid_punteros(snap) if formato == "mermaid" else render_ascii_punteros(snap)
 
 
+class MemoriaNoReal(Exception):
+    """No se pudo ejecutar el programa. Un diagrama va a un apunte o a una entrega y no lleva aviso:
+    a diferencia de la terminal, ahí no puede salir un dibujo con direcciones ilustrativas."""
+
+
+def exigir_memoria_real(snap: SnapshotMemoria) -> SnapshotMemoria:
+    if snap.origen != "gdb":
+        raise MemoriaNoReal(f"No se generó el diagrama: {snap.motivo}")
+    return snap
+
+
 def diagrama_de_fuente(fuente: Path, formato: str = "mermaid", punto_corte: Optional[str] = None) -> str:
     """Compila y ejecuta el fuente bajo gdb y dibuja la memoria real en el punto de corte."""
     from bishop.core.tracer import capturar_snapshot_gdb
-    return generar_diagrama(capturar_snapshot_gdb(fuente, punto_corte=punto_corte), formato)
+    return generar_diagrama(exigir_memoria_real(capturar_snapshot_gdb(fuente, punto_corte=punto_corte)), formato)

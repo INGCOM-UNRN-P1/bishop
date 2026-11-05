@@ -61,6 +61,10 @@ def generar_seccion_markdown(snap: SnapshotMemoria) -> str:
         f"<!-- dredd-section: bishop, tool=bishop, version=1.0.0, status={status} -->\n",
         "## Inspección de Memoria y Punteros (Bishop)\n",
     ]
+    if snap.origen != "gdb":
+        lines.append(f"> [!WARNING]\n> **Sin memoria real:** {snap.motivo} "
+                     "No hay datos de stack ni de heap para informar.\n")
+        return "\n".join(lines)
     lines.append(f"- **Archivo analizado:** `{snap.archivo.name}` (línea {snap.linea})")
     lines.append(f"- **Frames en Stack:** {len(snap.frames)}")
     lines.append(f"- **Bloques activos en Heap:** {len(snap.heap)} ({snap.total_bytes_heap_activos} bytes)")
@@ -114,7 +118,8 @@ def diagram_cmd(
     memoria real de un fuente C o desde un JSON escrito a mano: {"dato": 8, "izq": {...}, "der": null}
     para un árbol, [1, 2, 3] o {"valores": [...], "doble": true} para una lista.
     """
-    from bishop.core.diagrama import FORMATOS, diagrama_de_fuente, generar_diagrama, snapshot_desde_dict
+    from bishop.core.diagrama import (FORMATOS, MemoriaNoReal, diagrama_de_fuente, exigir_memoria_real,
+                                      generar_diagrama, snapshot_desde_dict)
     from bishop.core.tda import (ErrorDeTDA, estructura_desde_json, estructura_desde_snapshot,
                                  generar_diagrama_tda, punto_final_de_main)
 
@@ -133,20 +138,24 @@ def diagram_cmd(
     if tda:
         try:
             if datos is None:
-                snap = _snapshot(entrada, punto_corte=punto_corte or punto_final_de_main(entrada))
-                estructura = estructura_desde_snapshot(snap, raiz)
+                snap = capturar_snapshot_gdb(entrada, punto_corte=punto_corte or punto_final_de_main(entrada))
+                estructura = estructura_desde_snapshot(exigir_memoria_real(snap), raiz)
             elif isinstance(datos, dict) and any(k in datos for k in ("frames", "stack", "heap")):
                 estructura = estructura_desde_snapshot(snapshot_desde_dict(datos, entrada.name), raiz)
             else:
                 estructura = estructura_desde_json(datos, tda)
             diagrama = generar_diagrama_tda(estructura, tda, formato)
-        except ErrorDeTDA as exc:
+        except (ErrorDeTDA, MemoriaNoReal) as exc:
             err_console.print(f"[bold red]Error:[/bold red] {exc}")
             raise typer.Exit(code=2) from exc
     elif datos is not None:
         diagrama = generar_diagrama(snapshot_desde_dict(datos, entrada.name), formato)
     else:
-        diagrama = diagrama_de_fuente(entrada, formato, punto_corte)
+        try:
+            diagrama = diagrama_de_fuente(entrada, formato, punto_corte)
+        except MemoriaNoReal as exc:
+            err_console.print(f"[bold red]Error:[/bold red] {exc}")
+            raise typer.Exit(code=2) from exc
     if salida:
         salida.parent.mkdir(parents=True, exist_ok=True)
         salida.write_text(diagrama + "\n", encoding="utf-8")
